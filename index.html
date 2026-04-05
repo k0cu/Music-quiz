@@ -94,6 +94,8 @@ const CATEGORIES = [
 /* backward compat alias */
 const DECADES = CATEGORIES;
 
+const UN_KEY  = 'mcUsername';
+
 /* ── Recent artists (localStorage) ── */
 const ART_KEY = 'mcArtists';
 function getRecentArtists() {
@@ -197,11 +199,12 @@ function LoadingScreen({ categoryId, artistName }) {
 }
 
 /* ── START SCREEN ── */
-function StartScreen({ onStart, leaderboard }) {
+function StartScreen({ onStart, leaderboard, username, onUsernameChange }) {
   const [tab, setTab]           = useState('cat');   // 'cat' | 'artist'
   const [catId, setCatId]       = useState(null);
   const [artistInput, setArtistInput] = useState('');
   const [recentArtists, setRecentArtists] = useState(() => getRecentArtists());
+  const [editingNick, setEditingNick] = useState(false);
 
   const cat    = CATEGORIES.find(d => d.id === catId);
   const medals = ['🥇','🥈','🥉'];
@@ -257,6 +260,30 @@ function StartScreen({ onStart, leaderboard }) {
             Zgadnij 10 piosenek · Combo ×2 · Tabela rekordów
           </p>
         </div>
+
+        {/* Nick */}
+        <div className="card-glass" style={{borderRadius:15,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:22,flexShrink:0}}>🎮</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{color:'rgba(255,255,255,0.4)',fontSize:10,marginBottom:2}}>TWÓJ NICK</div>
+            <input
+              type="text"
+              value={username}
+              onChange={e => onUsernameChange(e.target.value.slice(0,20))}
+              onFocus={() => setEditingNick(true)}
+              onBlur={() => setEditingNick(false)}
+              placeholder="Wpisz nick (maks. 20 znaków)..."
+              style={{
+                width:'100%',background:'transparent',border:'none',outline:'none',
+                color:'#fff',fontSize:15,fontWeight:700,fontFamily:'inherit',
+                borderBottom: editingNick ? '1px solid rgba(139,92,246,0.6)' : '1px solid transparent',
+                paddingBottom:2,transition:'border-color 0.2s',
+              }}
+            />
+          </div>
+          {username && <span style={{color:'#4ade80',fontSize:14,flexShrink:0}}>✓</span>}
+        </div>
+
 
         {/* Mode tabs */}
         <div className="card-glass" style={{borderRadius:20,padding:14}}>
@@ -346,18 +373,15 @@ function StartScreen({ onStart, leaderboard }) {
                 background: i===0 ? 'rgba(251,191,36,0.05)' : 'transparent',
               }}>
                 <span style={{fontSize:16,width:22,textAlign:'center'}}>{medals[i]||`${i+1}`}</span>
-                <div style={{flex:1}}>
-                  <span style={{color:i===0?'#fbbf24':i===1?'#e2e8f0':i===2?'#fb923c':'rgba(255,255,255,0.6)',fontWeight:700,fontSize:14}}>
-                    {e.score.toLocaleString()}
-                  </span>
-                  <span style={{color:'rgba(255,255,255,0.25)',fontSize:10,marginLeft:6}}>pkt</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{color:i===0?'#fbbf24':i===1?'#e2e8f0':i===2?'#fb923c':'rgba(255,255,255,0.6)',fontWeight:700,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    {e.username || 'Gracz'}
+                  </div>
+                  <div style={{color:'rgba(255,255,255,0.4)',fontSize:11}}>{e.score.toLocaleString()} pkt</div>
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:4,maxWidth:100,overflow:'hidden'}}>
-                  {e.artistName
-                    ? <span style={{color:'rgba(255,255,255,0.4)',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>🎤 {e.artistName}</span>
-                    : <span style={{fontSize:12}}>{CATEGORIES.find(d=>d.id===(e.category||e.decade))?.emoji||'🎵'}</span>
-                  }
-                  <span style={{color:'rgba(255,255,255,0.25)',fontSize:10,flexShrink:0}}>{e.date}</span>
+                <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,flexShrink:0}}>
+                  <span style={{fontSize:12}}>{e.artistName ? '🎤' : (CATEGORIES.find(d=>d.id===(e.category||e.decade))?.emoji||'🎵')}</span>
+                  <span style={{color:'rgba(255,255,255,0.25)',fontSize:10}}>{e.date}</span>
                 </div>
               </div>
             ))}
@@ -691,15 +715,15 @@ function ResultScreen({ score, isNewHS, history, leaderboard, lbPosition, decade
                 background: e.score===score&&i===(lbPosition-1) ? 'rgba(139,92,246,0.12)' : i===0?'rgba(251,191,36,0.05)':'transparent',
               }}>
                 <span style={{fontSize:16,width:22,textAlign:'center'}}>{medals[i]||`${i+1}`}</span>
-                <div style={{flex:1}}>
-                  <span style={{color:i===0?'#fbbf24':i===1?'#e2e8f0':i===2?'#fb923c':'rgba(255,255,255,0.55)',fontWeight:700,fontSize:14}}>
-                    {e.score.toLocaleString()}
-                  </span>
-                  <span style={{color:'rgba(255,255,255,0.25)',fontSize:10,marginLeft:6}}>pkt</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{color:i===0?'#fbbf24':i===1?'#e2e8f0':i===2?'#fb923c':'rgba(255,255,255,0.55)',fontWeight:700,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    {e.username || 'Gracz'}
+                  </div>
+                  <div style={{color:'rgba(255,255,255,0.4)',fontSize:11}}>{e.score.toLocaleString()} pkt</div>
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:4}}>
-                  <span style={{fontSize:12}}>{DECADES.find(d=>d.id===e.decade)?.emoji||'🎵'}</span>
-                  <span style={{color:'rgba(255,255,255,0.3)',fontSize:10}}>{e.date}</span>
+                <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,flexShrink:0}}>
+                  <span style={{fontSize:12}}>{e.artistName ? '🎤' : (CATEGORIES.find(d=>d.id===(e.category||e.decade))?.emoji||'🎵')}</span>
+                  <span style={{color:'rgba(255,255,255,0.25)',fontSize:10}}>{e.date}</span>
                 </div>
               </div>
             ))}
@@ -773,6 +797,7 @@ function App() {
   const [multiplier, setMultiplier]     = useState(1);
   const [selectedDecade, setSelectedDecade] = useState(null);
   const [artistName, setArtistName]     = useState(null);
+  const [username, setUsername]         = useState(() => localStorage.getItem(UN_KEY) || '');
 
   /* refs */
   const audioRef        = useRef(new Audio());
@@ -786,6 +811,7 @@ function App() {
   const roundIndexRef   = useRef(0);
   const comboRef        = useRef(0);
   const artistNameRef   = useRef(null);
+  const usernameRef     = useRef(localStorage.getItem(UN_KEY) || '');
 
   /* ── loadRound ── */
   const loadRound = useCallback((idx, songList) => {
@@ -854,7 +880,8 @@ function App() {
       if (nextIdx >= TOTAL_ROUNDS) {
         const today = new Date().toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit',year:'2-digit'});
         const entry = { score: newScore, date: today,
-          category: selectedDecade, artistName: artistNameRef.current || null };
+          category: selectedDecade, artistName: artistNameRef.current || null,
+          username: usernameRef.current || 'Gracz' };
         const newLB = saveLB(entry);
         setLeaderboard(newLB);
         const pos = newLB.findIndex(e => e.score === newScore);
@@ -882,6 +909,12 @@ function App() {
     }, 100);
     return () => clearInterval(interval);
   }, [roundKey, gameState, handleAnswer]);
+
+  const handleUsernameChange = useCallback((val) => {
+    setUsername(val);
+    usernameRef.current = val;
+    localStorage.setItem(UN_KEY, val);
+  }, []);
 
   /* ── fetchSongs ── */
   const fetchSongs = useCallback(async (categoryId, artist) => {
@@ -938,7 +971,7 @@ function App() {
 
   /* ── render ── */
   if (gameState === 'START_SCREEN')
-    return <StartScreen onStart={fetchSongs} leaderboard={leaderboard}/>;
+    return <StartScreen onStart={fetchSongs} leaderboard={leaderboard} username={username} onUsernameChange={handleUsernameChange}/>;
   if (gameState === 'LOADING')
     return <LoadingScreen categoryId={selectedDecade} artistName={artistName}/>;
   if (gameState === 'RESULT_SCREEN')
