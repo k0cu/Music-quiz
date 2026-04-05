@@ -57,6 +57,8 @@
     @keyframes fireRise{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-90px) scale(0.5)}}
     .fire-rise{animation:fireRise 1.6s ease-out forwards}
     @keyframes decadeGlow{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 4px currentColor}}
+    @keyframes revealArt{from{opacity:0;transform:scale(0.85) rotateY(25deg)}to{opacity:1;transform:scale(1) rotateY(0)}}
+    .reveal-art{animation:revealArt 0.5s cubic-bezier(0.34,1.3,0.64,1) forwards}
     ::-webkit-scrollbar{width:5px}
     ::-webkit-scrollbar-thumb{background:rgba(139,92,246,0.5);border-radius:3px}
   </style>
@@ -339,13 +341,13 @@ function PlayingScreen({ round, score, currentSong, options, timeLeft, answered,
   return (
     <div className="bg-game" style={{minHeight:'100vh',display:'flex',flexDirection:'column',position:'relative',overflow:'hidden'}}>
 
-      {/* Blurred art bg */}
-      {artBig && (
-        <div style={{position:'absolute',inset:0,pointerEvents:'none',overflow:'hidden'}}>
-          <div style={{position:'absolute',inset:0,background:'rgba(10,5,30,0.72)'}}/>
-          <img src={artBig} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:0.22,filter:'blur(24px)',transform:'scale(1.1)'}}/>
-        </div>
-      )}
+      {/* Blurred art bg — widoczne tylko po odpowiedzi */}
+      <div style={{position:'absolute',inset:0,pointerEvents:'none',overflow:'hidden'}}>
+        <div style={{position:'absolute',inset:0,background:'rgba(10,5,30,0.72)'}}/>
+        {artBig && answered && (
+          <img src={artBig} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:0.22,filter:'blur(24px)',transform:'scale(1.1)',transition:'opacity 0.6s ease'}}/>
+        )}
+      </div>
 
       {/* Fire combo background glow */}
       {onFire && (
@@ -447,15 +449,18 @@ function PlayingScreen({ round, score, currentSong, options, timeLeft, answered,
         {/* Album art */}
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'6px 0'}}>
           <div style={{position:'relative'}}>
-            {art200 ? (
-              <img src={art200} alt="album" style={{width:120,height:120,borderRadius:16,objectFit:'cover',
+            {/* Placeholder przed odpowiedzią, okładka po */}
+            {answered && art200 ? (
+              <img src={art200} alt="album" className="reveal-art" style={{width:120,height:120,borderRadius:16,objectFit:'cover',
                 boxShadow:'0 20px 60px rgba(0,0,0,0.55),0 0 30px rgba(139,92,246,0.3)'}}/>
             ) : (
               <div style={{width:120,height:120,borderRadius:16,
-                background:'linear-gradient(135deg,#2563eb,#7c3aed)',
-                display:'flex',alignItems:'center',justifyContent:'center',
+                background:'linear-gradient(135deg,#1e1b4b,#312e81)',
+                border:'2px solid rgba(139,92,246,0.35)',
+                display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:6,
                 boxShadow:'0 20px 60px rgba(0,0,0,0.5)'}}>
-                <Ic.Music s={46} c="text-white"/>
+                <span style={{fontSize:36}}>🎵</span>
+                <span style={{color:'rgba(255,255,255,0.3)',fontSize:11,fontWeight:600}}>???</span>
               </div>
             )}
             <div style={{position:'absolute',inset:0,borderRadius:16,
