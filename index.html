@@ -79,17 +79,17 @@ const LB_KEY = 'mcLB';
 /* ── Categories config ── */
 const CATEGORIES = [
   { id:'pop',    emoji:'🎵', label:'Pop',            color:'#ec4899', glow:'rgba(236,72,153,0.5)',
-    terms:['pop hits 2024','taylor swift','dua lipa','ariana grande','ed sheeran'] },
+    terms:['pop hits','pop songs 2023','pop music chart','pop radio hits','pop 2022'] },
   { id:'rock',   emoji:'🎸', label:'Rock',           color:'#ef4444', glow:'rgba(239,68,68,0.5)',
-    terms:['rock classics','queen','foo fighters','the killers','coldplay rock'] },
+    terms:['rock music','classic rock hits','rock songs','alternative rock','indie rock'] },
   { id:'metal',  emoji:'🤘', label:'Metal',          color:'#6366f1', glow:'rgba(99,102,241,0.5)',
-    terms:['metallica','iron maiden','black sabbath','heavy metal classic','slayer'] },
+    terms:['heavy metal music','metal songs','thrash metal','hard rock metal','metal classics'] },
   { id:'electro',emoji:'⚡', label:'Electro',        color:'#06b6d4', glow:'rgba(6,182,212,0.5)',
-    terms:['daft punk','deadmau5','electronic music','aphex twin','prodigy'] },
+    terms:['electronic music','electro dance','synth pop','dance electronic','edm hits'] },
   { id:'80s',    emoji:'🕺', label:'Lata 80.',       color:'#f59e0b', glow:'rgba(245,158,11,0.5)',
-    terms:['80s pop hits','michael jackson','madonna 80s','prince 80s','david bowie 80s'] },
+    terms:['80s pop music','80s rock hits','80s greatest hits','1980s music','80s classics'] },
   { id:'90s',    emoji:'💿', label:'Lata 90.',       color:'#10b981', glow:'rgba(16,185,129,0.5)',
-    terms:['90s hits','nirvana','spice girls','backstreet boys','britney spears 90s'] },
+    terms:['90s pop music','90s rock hits','90s greatest hits','1990s music','90s classics'] },
 ];
 /* backward compat alias */
 const DECADES = CATEGORIES;
@@ -817,7 +817,11 @@ function App() {
   const loadRound = useCallback((idx, songList) => {
     const pool = [...songList].sort(() => Math.random() - 0.5);
     const correct = pool[0];
-    const allOpts = [correct, ...pool.slice(1,4)].sort(() => Math.random() - 0.5);
+    /* prefer wrong options from different artists */
+    const diffArtist = pool.filter(s => s.artistName !== correct.artistName);
+    const sameOk     = pool.filter(s => s.trackId !== correct.trackId);
+    const wrongs     = diffArtist.length >= 3 ? diffArtist.slice(0,3) : sameOk.slice(0,3);
+    const allOpts    = [correct, ...wrongs].sort(() => Math.random() - 0.5);
 
     currentSongRef.current = correct;
     answeredRef.current    = false;
@@ -923,21 +927,39 @@ function App() {
     artistNameRef.current = artist || null;
     setGameState('LOADING');
 
-    let url;
-    if (artist) {
-      url = `https://itunes.apple.com/search?term=${encodeURIComponent(artist)}&entity=song&limit=50&attribute=artistTerm&country=US`;
-    } else {
-      const cat   = CATEGORIES.find(d => d.id === categoryId);
-      const terms = cat ? cat.terms : ['pop hits'];
-      const term  = terms[Math.floor(Math.random() * terms.length)];
-      url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=50&country=US`;
-    }
-
     try {
-      const res  = await fetch(url);
-      if (!res.ok) throw new Error('API error');
-      const data = await res.json();
-      const valid = data.results.filter(s => s.previewUrl && s.trackName && s.artistName);
+      let valid;
+      if (artist) {
+        /* artist mode: single targeted fetch */
+        const url = `https://itunes.apple.com/search?term=${encodeURIComponent(artist)}&entity=song&limit=50&attribute=artistTerm&country=US`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('API error');
+        const data = await res.json();
+        valid = (data.results || []).filter(s => s.previewUrl && s.trackName && s.artistName);
+      } else {
+        /* category mode: fetch ALL terms in parallel, merge, diversify */
+        const cat   = CATEGORIES.find(d => d.id === categoryId);
+        const terms = cat ? cat.terms : ['pop hits'];
+        const results = await Promise.all(
+          terms.map(term =>
+            fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=50&country=US`)
+              .then(r => r.ok ? r.json() : { results: [] })
+              .then(d => (d.results || []).filter(s => s.previewUrl && s.trackName && s.artistName))
+              .catch(() => [])
+          )
+        );
+        /* deduplicate by trackId */
+        const byId = new Map();
+        for (const song of results.flat()) byId.set(song.trackId, song);
+        /* cap at 5 songs per artist for variety */
+        const artistCount = {};
+        valid = [...byId.values()].filter(s => {
+          const k = s.artistName.toLowerCase();
+          return (artistCount[k] = (artistCount[k] || 0) + 1) <= 5;
+        });
+        /* shuffle to mix artists */
+        valid = valid.sort(() => Math.random() - 0.5);
+      }
       if (valid.length < 4) throw new Error('Too few songs with previews');
       songsRef.current = valid;
 
