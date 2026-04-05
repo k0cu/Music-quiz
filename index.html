@@ -17,6 +17,7 @@
     .glossy-btn::after{content:"";position:absolute;top:0;left:0;right:0;height:50%;background:linear-gradient(to bottom,rgba(255,255,255,0.22),rgba(255,255,255,0.04));pointer-events:none;border-radius:inherit}
     .glossy-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 25px rgba(0,0,0,0.35)}
     .glossy-btn:active:not(:disabled){transform:translateY(0)}
+    .glossy-btn:disabled{opacity:0.45;cursor:default}
     .option-idle{background:linear-gradient(135deg,rgba(59,130,246,0.22),rgba(139,92,246,0.22));border:2px solid rgba(139,92,246,0.4)}
     .option-idle:hover:not(:disabled){background:linear-gradient(135deg,rgba(59,130,246,0.5),rgba(139,92,246,0.5));border-color:rgba(167,139,250,0.85)}
     .option-correct{background:linear-gradient(135deg,#15803d,#16a34a)!important;border:2px solid #4ade80!important}
@@ -46,6 +47,16 @@
     .spin-slow{animation:spin 1.8s linear infinite}
     @keyframes timerBlink{0%,100%{opacity:1}50%{opacity:0.6}}
     .timer-blink{animation:timerBlink 0.5s ease-in-out infinite}
+    /* ── COMBO / FIRE ── */
+    @keyframes fireF{0%,100%{transform:translateY(0) scaleX(1) rotate(-3deg)}50%{transform:translateY(-5px) scaleX(0.9) rotate(3deg)}}
+    .fire-f{animation:fireF 0.35s ease-in-out infinite}
+    @keyframes comboPop{0%{transform:scale(0) rotate(-12deg);opacity:0}65%{transform:scale(1.2) rotate(4deg);opacity:1}100%{transform:scale(1) rotate(0);opacity:1}}
+    .combo-pop{animation:comboPop 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards}
+    @keyframes comboBg{0%,100%{opacity:0.1}50%{opacity:0.28}}
+    .combo-bg{animation:comboBg 0.9s ease-in-out infinite}
+    @keyframes fireRise{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-90px) scale(0.5)}}
+    .fire-rise{animation:fireRise 1.6s ease-out forwards}
+    @keyframes decadeGlow{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 16px 4px currentColor}}
     ::-webkit-scrollbar{width:5px}
     ::-webkit-scrollbar-thumb{background:rgba(139,92,246,0.5);border-radius:3px}
   </style>
@@ -60,67 +71,56 @@ const TOTAL_ROUNDS = 10;
 const ROUND_TIME = 15;
 const BASE_PTS = 1000;
 const TIME_MULT = 100;
+const COMBO_THRESHOLD = 3;
+const LB_KEY = 'mcLB';
+
+/* ── Decades config ── */
+const DECADES = [
+  { id:'80s', emoji:'🕺', label:'Lata 80.',       color:'#f59e0b', glow:'rgba(245,158,11,0.5)',
+    terms:['80s pop hits','michael jackson','madonna 80s','prince 80s'] },
+  { id:'90s', emoji:'💿', label:'Lata 90.',       color:'#10b981', glow:'rgba(16,185,129,0.5)',
+    terms:['90s hits','nirvana','spice girls','backstreet boys','90s pop'] },
+  { id:'now', emoji:'🔥', label:'Współczesny Pop', color:'#a78bfa', glow:'rgba(167,139,250,0.5)',
+    terms:['pop 2023','taylor swift','dua lipa','pop hits 2024'] },
+];
+
+/* ── Leaderboard helpers ── */
+function getLB() {
+  try { return JSON.parse(localStorage.getItem(LB_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveLB(entry) {
+  const lb = getLB();
+  lb.push(entry);
+  lb.sort((a,b) => b.score - a.score);
+  if (lb.length > 10) lb.length = 10;
+  localStorage.setItem(LB_KEY, JSON.stringify(lb));
+  return lb;
+}
+function getLBPosition(score) {
+  const lb = getLB();
+  const pos = lb.findIndex(e => e.score === score);
+  return pos === -1 ? null : pos + 1;
+}
 
 /* ── SVG Icons ── */
 const Ic = {
-  Music: ({s=24,c=''}) => (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}>
-      <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-    </svg>
-  ),
-  Trophy: ({s=24,c=''}) => (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}>
-      <line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
-      <path d="M7 4v6a5 5 0 0 0 10 0V4"/><polyline points="7 4 3 4 3 8 7 8"/><polyline points="17 4 21 4 21 8 17 8"/>
-    </svg>
-  ),
-  Star: ({s=24,c=''}) => (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" stroke="none" className={c}>
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-    </svg>
-  ),
-  Check: ({s=24,c=''}) => (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={c}>
-      <polyline points="20 6 9 17 4 12"/>
-    </svg>
-  ),
-  X: ({s=24,c=''}) => (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={c}>
-      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-    </svg>
-  ),
-  Vol: ({s=24,c=''}) => (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}>
-      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-      <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
-    </svg>
-  ),
-  VolX: ({s=24,c=''}) => (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}>
-      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-      <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
-    </svg>
-  ),
-  Refresh: ({s=24,c=''}) => (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}>
-      <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-    </svg>
-  ),
-  Clock: ({s=24,c=''}) => (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}>
-      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-    </svg>
-  ),
+  Music:   ({s=24,c=''}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>,
+  Trophy:  ({s=24,c=''}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><path d="M7 4v6a5 5 0 0 0 10 0V4"/><polyline points="7 4 3 4 3 8 7 8"/><polyline points="17 4 21 4 21 8 17 8"/></svg>,
+  Star:    ({s=24,c=''}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" stroke="none" className={c}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+  Check:   ({s=24,c=''}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={c}><polyline points="20 6 9 17 4 12"/></svg>,
+  X:       ({s=24,c=''}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={c}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  Vol:     ({s=24,c=''}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>,
+  VolX:    ({s=24,c=''}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>,
+  Refresh: ({s=24,c=''}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>,
+  Clock:   ({s=24,c=''}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={c}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
 };
 
 /* ── Music Bars ── */
-function MusicBars({ playing, cls = '' }) {
+function MusicBars({ playing, cls='' }) {
   if (!playing) return (
     <div className={`flex items-end gap-0.5 ${cls}`} style={{height:28}}>
-      {[8,16,10,20].map((h,i) => (
-        <div key={i} style={{width:4,height:h,background:'currentColor',borderRadius:2}}/>
-      ))}
+      {[8,16,10,20].map((h,i) => <div key={i} style={{width:4,height:h,background:'currentColor',borderRadius:2}}/>)}
     </div>
   );
   return (
@@ -137,113 +137,188 @@ function MusicBars({ playing, cls = '' }) {
 function TimerBar({ timeLeft, answered }) {
   const pct = Math.max(0, (timeLeft / ROUND_TIME) * 100);
   const col = pct > 60 ? '#4ade80' : pct > 30 ? '#fbbf24' : '#ef4444';
-  const isLow = timeLeft <= 5 && !answered;
   return (
     <div style={{width:'100%',height:12,background:'rgba(255,255,255,0.1)',borderRadius:9999,overflow:'hidden'}}>
       <div style={{
-        width: `${pct}%`, height:'100%', borderRadius:9999,
-        background: col, transition:'width 0.1s linear, background 0.3s',
-        boxShadow: `0 0 8px ${col}90`,
-      }} className={isLow ? 'timer-blink' : ''}/>
+        width:`${pct}%`,height:'100%',borderRadius:9999,
+        background:col,transition:'width 0.1s linear, background 0.3s',
+        boxShadow:`0 0 8px ${col}90`,
+      }} className={timeLeft<=5&&!answered?'timer-blink':''}/>
     </div>
   );
 }
 
-/* ── LOADING SCREEN ── */
-function LoadingScreen() {
+/* ── LOADING ── */
+function LoadingScreen({ decade }) {
+  const dec = DECADES.find(d => d.id === decade) || DECADES[2];
   return (
     <div className="bg-game flex items-center justify-center min-h-screen">
-      <div className="text-center">
+      <div style={{textAlign:'center'}}>
         <div style={{position:'relative',width:88,height:88,margin:'0 auto 20px'}}>
           <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'4px solid rgba(139,92,246,0.25)'}}/>
-          <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'4px solid transparent',borderTopColor:'#a78bfa'}} className="spin-slow"/>
-          <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
-            <Ic.Music s={34} c="text-purple-300"/>
+          <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'4px solid transparent',borderTopColor:dec.color}} className="spin-slow"/>
+          <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:32}}>
+            {dec.emoji}
           </div>
         </div>
-        <p style={{color:'rgba(255,255,255,0.8)',fontSize:20,fontWeight:600,margin:0}}>Ładowanie piosenek...</p>
-        <p style={{color:'rgba(255,255,255,0.4)',fontSize:13,marginTop:6}}>Pobieranie z iTunes Search API</p>
+        <p style={{color:'rgba(255,255,255,0.85)',fontSize:20,fontWeight:700,margin:0}}>
+          Ładowanie {dec.label}...
+        </p>
+        <p style={{color:'rgba(255,255,255,0.4)',fontSize:13,marginTop:6}}>iTunes Search API</p>
       </div>
     </div>
   );
 }
 
 /* ── START SCREEN ── */
-function StartScreen({ onStart, highScore }) {
-  return (
-    <div className="bg-game flex items-center justify-center min-h-screen p-5" style={{position:'relative',overflow:'hidden'}}>
-      <div style={{position:'absolute',top:40,left:40,width:200,height:200,borderRadius:'50%',background:'rgba(59,130,246,0.08)',filter:'blur(40px)',pointerEvents:'none'}}/>
-      <div style={{position:'absolute',bottom:60,right:30,width:260,height:260,borderRadius:'50%',background:'rgba(139,92,246,0.1)',filter:'blur(50px)',pointerEvents:'none'}}/>
+function StartScreen({ onStart, leaderboard }) {
+  const [decade, setDecade] = useState(null);
+  const dec = DECADES.find(d => d.id === decade);
 
-      <div className="fade-in-up" style={{maxWidth:420,width:'100%',textAlign:'center',position:'relative'}}>
-        {/* Logo */}
-        <div className="pulse-glow" style={{
-          width:120,height:120,borderRadius:'50%',margin:'0 auto 24px',
-          background:'linear-gradient(135deg,#3b82f6,#7c3aed)',
-          display:'flex',alignItems:'center',justifyContent:'center',position:'relative',
-          boxShadow:'0 10px 40px rgba(139,92,246,0.5)'
-        }}>
-          <Ic.Music s={56} c="text-white"/>
-          <div style={{position:'absolute',inset:0,borderRadius:'50%',background:'linear-gradient(135deg,rgba(255,255,255,0.28) 0%,transparent 60%)'}}/>
+  const medals = ['🥇','🥈','🥉'];
+  const decadeLabel = id => DECADES.find(d=>d.id===id)?.emoji + ' ' + (DECADES.find(d=>d.id===id)?.label || id);
+
+  return (
+    <div className="bg-game" style={{minHeight:'100vh',padding:'20px 16px',overflowY:'auto',position:'relative'}}>
+      {/* bg blobs */}
+      <div style={{position:'fixed',top:30,left:20,width:180,height:180,borderRadius:'50%',background:'rgba(59,130,246,0.07)',filter:'blur(40px)',pointerEvents:'none'}}/>
+      <div style={{position:'fixed',bottom:60,right:20,width:240,height:240,borderRadius:'50%',background:'rgba(139,92,246,0.09)',filter:'blur(50px)',pointerEvents:'none'}}/>
+
+      <div className="fade-in-up" style={{maxWidth:440,margin:'0 auto',display:'flex',flexDirection:'column',gap:20}}>
+
+        {/* Logo + Title */}
+        <div style={{textAlign:'center',paddingTop:16}}>
+          <div className="pulse-glow" style={{
+            width:110,height:110,borderRadius:'50%',margin:'0 auto 18px',
+            background:'linear-gradient(135deg,#3b82f6,#7c3aed)',
+            display:'flex',alignItems:'center',justifyContent:'center',position:'relative',
+            boxShadow:'0 10px 40px rgba(139,92,246,0.5)',
+          }}>
+            <Ic.Music s={52} c="text-white"/>
+            <div style={{position:'absolute',inset:0,borderRadius:'50%',background:'linear-gradient(135deg,rgba(255,255,255,0.28) 0%,transparent 60%)'}}/>
+          </div>
+          <h1 style={{fontSize:48,fontWeight:900,color:'#fff',margin:'0 0 4px',letterSpacing:-1,textShadow:'0 0 30px rgba(139,92,246,0.7)'}}>
+            MUSIC
+          </h1>
+          <h2 style={{fontSize:28,fontWeight:900,margin:'0 0 8px',background:'linear-gradient(90deg,#60a5fa,#a78bfa,#f0abfc)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
+            CHALLENGE
+          </h2>
+          <p style={{color:'rgba(255,255,255,0.5)',fontSize:13,margin:0}}>
+            Zgadnij 10 piosenek i zdobądź jak najwięcej punktów!
+          </p>
         </div>
 
-        {/* Title */}
-        <h1 style={{fontSize:52,fontWeight:900,color:'#fff',margin:'0 0 4px',letterSpacing:-1,textShadow:'0 0 30px rgba(139,92,246,0.7),0 2px 4px rgba(0,0,0,0.5)'}}>
-          MUSIC
-        </h1>
-        <h2 style={{fontSize:32,fontWeight:900,margin:'0 0 10px',background:'linear-gradient(90deg,#60a5fa,#a78bfa,#f0abfc)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
-          CHALLENGE
-        </h2>
-        <p style={{color:'rgba(255,255,255,0.55)',fontSize:14,marginBottom:28}}>
-          Zgadnij 10 piosenek i zdobądź jak najwięcej punktów!
-        </p>
+        {/* Decade selector */}
+        <div className="card-glass" style={{borderRadius:20,padding:16}}>
+          <p style={{color:'rgba(255,255,255,0.7)',fontWeight:700,fontSize:13,margin:'0 0 12px',textAlign:'center'}}>
+            🎶 Wybierz epokę muzyczną
+          </p>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+            {DECADES.map(d => {
+              const active = decade === d.id;
+              return (
+                <button key={d.id} onClick={() => setDecade(d.id)}
+                  className="glossy-btn"
+                  style={{
+                    borderRadius:14,padding:'14px 8px',border:'2px solid',
+                    borderColor: active ? d.color : 'rgba(255,255,255,0.15)',
+                    background: active
+                      ? `linear-gradient(135deg,${d.color}30,${d.color}55)`
+                      : 'rgba(255,255,255,0.05)',
+                    cursor:'pointer',
+                    boxShadow: active ? `0 0 20px ${d.glow}` : 'none',
+                    transition:'all 0.2s',
+                  }}>
+                  <div style={{fontSize:28,marginBottom:6}}>{d.emoji}</div>
+                  <div style={{color: active ? d.color : 'rgba(255,255,255,0.7)',fontWeight:700,fontSize:12,lineHeight:1.3}}>
+                    {d.label}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-        {/* High score */}
-        {highScore > 0 && (
-          <div className="card-glass" style={{borderRadius:16,padding:'12px 20px',marginBottom:20,display:'inline-flex',alignItems:'center',gap:10}}>
-            <Ic.Trophy s={18} c="text-yellow-400"/>
-            <span style={{color:'rgba(255,255,255,0.6)',fontSize:13}}>Najlepszy wynik:</span>
-            <span style={{color:'#fbbf24',fontWeight:900,fontSize:20}}>{highScore.toLocaleString()}</span>
+        {/* Leaderboard */}
+        {leaderboard.length > 0 && (
+          <div className="card-glass" style={{borderRadius:18,overflow:'hidden'}}>
+            <div style={{padding:'12px 16px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',gap:8}}>
+              <Ic.Trophy s={16} c="text-yellow-400"/>
+              <span style={{color:'rgba(255,255,255,0.85)',fontWeight:700,fontSize:14}}>Tabela wyników</span>
+            </div>
+            {leaderboard.slice(0,5).map((e,i) => (
+              <div key={i} style={{
+                display:'flex',alignItems:'center',gap:12,padding:'10px 16px',
+                borderBottom: i<Math.min(leaderboard.length,5)-1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                background: i===0 ? 'rgba(251,191,36,0.06)' : 'transparent',
+              }}>
+                <span style={{fontSize:18,width:24,textAlign:'center'}}>{medals[i] || `${i+1}`}</span>
+                <div style={{flex:1}}>
+                  <span style={{
+                    color: i===0?'#fbbf24':i===1?'#e2e8f0':i===2?'#fb923c':'rgba(255,255,255,0.6)',
+                    fontWeight:700,fontSize:15
+                  }}>{e.score.toLocaleString()}</span>
+                  <span style={{color:'rgba(255,255,255,0.3)',fontSize:11,marginLeft:8}}>pkt</span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:4}}>
+                  <span style={{fontSize:13}}>{DECADES.find(d=>d.id===e.decade)?.emoji || '🎵'}</span>
+                  <span style={{color:'rgba(255,255,255,0.35)',fontSize:11}}>{e.date}</span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
         {/* How to play */}
-        <div className="card-glass" style={{borderRadius:16,padding:16,marginBottom:28,textAlign:'left'}}>
-          <div style={{color:'rgba(255,255,255,0.75)',fontWeight:700,fontSize:13,marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
-            <Ic.Star s={14} c="text-yellow-400"/> Jak grać
+        <div className="card-glass" style={{borderRadius:16,padding:14}}>
+          <div style={{color:'rgba(255,255,255,0.7)',fontWeight:700,fontSize:12,marginBottom:8,display:'flex',alignItems:'center',gap:5}}>
+            <Ic.Star s={13} c="text-yellow-400"/> Jak grać
           </div>
-          <ul style={{margin:0,padding:0,listStyle:'none',display:'flex',flexDirection:'column',gap:7}}>
+          <div style={{display:'flex',flexDirection:'column',gap:5}}>
             {[
               ['🎵','Posłuchaj fragmentu piosenki'],
-              ['⚡','Wybierz poprawny tytuł spośród 4 opcji'],
-              ['⏱️','Masz 15 sekund na każdą odpowiedź'],
-              ['🏆','Szybsza odpowiedź = więcej punktów!'],
+              ['⚡','Wybierz tytuł spośród 4 opcji w 15 sek.'],
+              ['🔥','3 pod rząd = COMBO ×2 – punkty x2!'],
+              ['🏆','Szybsza odpowiedź = więcej punktów'],
             ].map(([em,txt],i) => (
-              <li key={i} style={{color:'rgba(255,255,255,0.55)',fontSize:13,display:'flex',alignItems:'center',gap:8}}>
-                <span>{em}</span><span>{txt}</span>
-              </li>
+              <div key={i} style={{color:'rgba(255,255,255,0.5)',fontSize:12,display:'flex',alignItems:'flex-start',gap:7}}>
+                <span style={{flexShrink:0}}>{em}</span><span>{txt}</span>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
 
         {/* Start button */}
-        <button onClick={onStart} className="glossy-btn" style={{
-          width:'100%',padding:'18px 0',borderRadius:18,fontSize:20,fontWeight:900,
-          color:'#fff',border:'none',cursor:'pointer',
-          background:'linear-gradient(135deg,#3b82f6 0%,#7c3aed 50%,#8b5cf6 100%)',
-          boxShadow:'0 10px 40px rgba(139,92,246,0.5),0 4px 15px rgba(0,0,0,0.3)',
-        }}>
-          🎮 GRAJ TERAZ
+        <button
+          onClick={() => decade && onStart(decade)}
+          disabled={!decade}
+          className="glossy-btn"
+          style={{
+            width:'100%',padding:'18px 0',borderRadius:18,fontSize:19,fontWeight:900,
+            color:'#fff',border:'none',cursor: decade?'pointer':'default',
+            background: dec
+              ? `linear-gradient(135deg,${dec.color}88 0%,#7c3aed 50%,#3b82f6 100%)`
+              : 'linear-gradient(135deg,#3b82f6 0%,#7c3aed 100%)',
+            boxShadow: dec ? `0 10px 40px ${dec.glow},0 4px 15px rgba(0,0,0,0.3)` : 'none',
+          }}>
+          {decade ? `${dec.emoji} GRAJ – ${dec.label}` : '← Wybierz epokę'}
         </button>
-        <p style={{color:'rgba(255,255,255,0.25)',fontSize:11,marginTop:14}}>Muzyka: iTunes Search API</p>
+        <p style={{color:'rgba(255,255,255,0.2)',fontSize:11,textAlign:'center',marginTop:-10}}>
+          Muzyka: iTunes Search API
+        </p>
       </div>
     </div>
   );
 }
 
 /* ── PLAYING SCREEN ── */
-function PlayingScreen({ round, score, currentSong, options, timeLeft, answered, selectedOption, onAnswer, isMuted, onToggleMute, isAudioPlaying, audioError, lastRoundScore, showRoundScore }) {
+function PlayingScreen({ round, score, currentSong, options, timeLeft, answered, selectedOption,
+  onAnswer, isMuted, onToggleMute, isAudioPlaying, audioError, lastRoundScore, showRoundScore,
+  combo, multiplier, decadeId }) {
+
   const correctId = currentSong ? currentSong.trackId : null;
+  const onFire = combo >= COMBO_THRESHOLD;
+  const dec = DECADES.find(d => d.id === decadeId) || DECADES[2];
 
   const optCls = (opt) => {
     if (!answered) return 'option-idle';
@@ -258,53 +333,72 @@ function PlayingScreen({ round, score, currentSong, options, timeLeft, answered,
     return '';
   };
 
-  const artBig = currentSong && currentSong.artworkUrl100
-    ? currentSong.artworkUrl100.replace('100x100bb','400x400bb').replace('100x100','400x400')
-    : null;
-  const art200 = currentSong && currentSong.artworkUrl100
-    ? currentSong.artworkUrl100.replace('100x100bb','200x200bb').replace('100x100','200x200')
-    : null;
+  const artBig = currentSong?.artworkUrl100?.replace('100x100bb','400x400bb').replace('100x100','400x400') || null;
+  const art200 = currentSong?.artworkUrl100?.replace('100x100bb','200x200bb').replace('100x100','200x200') || null;
 
   return (
     <div className="bg-game" style={{minHeight:'100vh',display:'flex',flexDirection:'column',position:'relative',overflow:'hidden'}}>
-      {/* Blurred background */}
+
+      {/* Blurred art bg */}
       {artBig && (
         <div style={{position:'absolute',inset:0,pointerEvents:'none',overflow:'hidden'}}>
           <div style={{position:'absolute',inset:0,background:'rgba(10,5,30,0.72)'}}/>
-          <img src={artBig} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:0.25,filter:'blur(24px)',transform:'scale(1.1)'}}/>
+          <img src={artBig} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:0.22,filter:'blur(24px)',transform:'scale(1.1)'}}/>
         </div>
       )}
 
-      <div style={{position:'relative',maxWidth:480,margin:'0 auto',width:'100%',display:'flex',flexDirection:'column',gap:14,padding:'16px 16px 24px',minHeight:'100vh'}}>
+      {/* Fire combo background glow */}
+      {onFire && (
+        <div className="combo-bg" style={{
+          position:'absolute',inset:0,pointerEvents:'none',
+          background:'radial-gradient(ellipse at center bottom, rgba(251,146,60,0.22) 0%, rgba(239,68,68,0.08) 50%, transparent 75%)',
+        }}/>
+      )}
+
+      {/* Floating fire emojis when on combo */}
+      {onFire && (
+        <>
+          <div style={{position:'fixed',left:8,bottom:80,fontSize:28,lineHeight:1,pointerEvents:'none',zIndex:10}} className="fire-f">🔥</div>
+          <div style={{position:'fixed',right:8,bottom:80,fontSize:28,lineHeight:1,pointerEvents:'none',zIndex:10,animationDelay:'0.18s'}} className="fire-f">🔥</div>
+          <div style={{position:'fixed',left:24,bottom:130,fontSize:18,lineHeight:1,pointerEvents:'none',zIndex:10,animationDelay:'0.35s'}} className="fire-f">🔥</div>
+          <div style={{position:'fixed',right:24,bottom:130,fontSize:18,lineHeight:1,pointerEvents:'none',zIndex:10,animationDelay:'0.52s'}} className="fire-f">🔥</div>
+        </>
+      )}
+
+      <div style={{position:'relative',maxWidth:480,margin:'0 auto',width:'100%',display:'flex',flexDirection:'column',gap:13,padding:'14px 16px 24px',minHeight:'100vh'}}>
 
         {/* Header */}
         <div className="slide-down" style={{display:'flex',alignItems:'center',justifyContent:'space-between',paddingTop:4}}>
           <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <span style={{color:'rgba(255,255,255,0.45)',fontSize:13}}>Runda</span>
-            <span style={{color:'#fff',fontWeight:900,fontSize:22}}>{round + 1}</span>
-            <span style={{color:'rgba(255,255,255,0.3)',fontSize:13}}>/ {TOTAL_ROUNDS}</span>
+            <span style={{fontSize:16}}>{dec.emoji}</span>
+            <span style={{color:'rgba(255,255,255,0.4)',fontSize:12}}>Runda</span>
+            <span style={{color:'#fff',fontWeight:900,fontSize:20}}>{round+1}</span>
+            <span style={{color:'rgba(255,255,255,0.25)',fontSize:12}}>/ {TOTAL_ROUNDS}</span>
           </div>
           <div style={{position:'relative'}}>
-            <div className="card-glass" style={{borderRadius:9999,padding:'8px 16px',display:'flex',alignItems:'center',gap:8}}>
-              <Ic.Star s={15} c="text-yellow-400"/>
-              <span style={{color:'#fbbf24',fontWeight:900,fontSize:18}}>{score.toLocaleString()}</span>
+            <div className="card-glass" style={{borderRadius:9999,padding:'7px 14px',display:'flex',alignItems:'center',gap:7,
+              border: onFire ? '1px solid rgba(251,146,60,0.5)' : '1px solid rgba(255,255,255,0.12)',
+              background: onFire ? 'rgba(251,146,60,0.1)' : 'rgba(255,255,255,0.08)'}}>
+              <Ic.Star s={14} c="text-yellow-400"/>
+              <span style={{color:'#fbbf24',fontWeight:900,fontSize:17}}>{score.toLocaleString()}</span>
             </div>
             {showRoundScore && (
               <div className="score-float" style={{
                 top:-30,left:'50%',transform:'translateX(-50%)',
-                fontSize:20,fontWeight:900,whiteSpace:'nowrap',
-                color: lastRoundScore > 0 ? '#4ade80' : '#f87171'
+                fontSize:19,fontWeight:900,whiteSpace:'nowrap',
+                color: lastRoundScore > 0 ? '#4ade80' : '#f87171',
               }}>
-                {lastRoundScore > 0 ? `+${lastRoundScore}` : 'MISS!'}
+                {lastRoundScore > 0
+                  ? `+${lastRoundScore}${multiplier > 1 ? ' ×2🔥' : ''}`
+                  : 'MISS!'}
               </div>
             )}
           </div>
           <button onClick={onToggleMute} className="card-glass" style={{
             borderRadius:'50%',width:36,height:36,border:'none',cursor:'pointer',
             color:'rgba(255,255,255,0.7)',display:'flex',alignItems:'center',justifyContent:'center',
-            background:'rgba(255,255,255,0.08)',transition:'color 0.2s'
-          }}>
-            {isMuted ? <Ic.VolX s={18}/> : <Ic.Vol s={18}/>}
+            background:'rgba(255,255,255,0.08)'}}>
+            {isMuted ? <Ic.VolX s={17}/> : <Ic.Vol s={17}/>}
           </button>
         </div>
 
@@ -312,12 +406,28 @@ function PlayingScreen({ round, score, currentSong, options, timeLeft, answered,
         <div style={{display:'flex',justifyContent:'center',gap:5}}>
           {Array.from({length:TOTAL_ROUNDS},(_,i) => (
             <div key={i} style={{
-              height:7, borderRadius:9999, transition:'all 0.3s',
-              width: i === round ? 20 : 7,
-              background: i < round ? '#a78bfa' : i === round ? '#7c3aed' : 'rgba(255,255,255,0.18)',
+              height:7,borderRadius:9999,transition:'all 0.3s',
+              width: i===round ? 20 : 7,
+              background: i<round ? '#a78bfa' : i===round ? '#7c3aed' : 'rgba(255,255,255,0.18)',
             }}/>
           ))}
         </div>
+
+        {/* Combo badge */}
+        {onFire && (
+          <div className="combo-pop" style={{
+            display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+            background:'linear-gradient(135deg,rgba(239,68,68,0.3),rgba(251,146,60,0.3))',
+            border:'2px solid rgba(251,146,60,0.6)',
+            borderRadius:12,padding:'9px 16px',
+            boxShadow:'0 0 20px rgba(251,146,60,0.3)',
+          }}>
+            <span style={{fontSize:22}} className="fire-f">🔥</span>
+            <span style={{color:'#fb923c',fontWeight:900,fontSize:16,letterSpacing:1}}>COMBO ×2!</span>
+            <span style={{color:'rgba(255,255,255,0.6)',fontSize:13}}>{combo} z rzędu</span>
+            <span style={{fontSize:22}} className="fire-f">🔥</span>
+          </div>
+        )}
 
         {/* Timer */}
         <div>
@@ -334,85 +444,65 @@ function PlayingScreen({ round, score, currentSong, options, timeLeft, answered,
           <TimerBar timeLeft={timeLeft} answered={answered}/>
         </div>
 
-        {/* Album art + music indicator */}
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'8px 0'}}>
+        {/* Album art */}
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'6px 0'}}>
           <div style={{position:'relative'}}>
             {art200 ? (
-              <img src={art200} alt="album"
-                style={{width:130,height:130,borderRadius:18,objectFit:'cover',
-                  boxShadow:'0 20px 60px rgba(0,0,0,0.55),0 0 30px rgba(139,92,246,0.3)'}}
-              />
+              <img src={art200} alt="album" style={{width:120,height:120,borderRadius:16,objectFit:'cover',
+                boxShadow:'0 20px 60px rgba(0,0,0,0.55),0 0 30px rgba(139,92,246,0.3)'}}/>
             ) : (
-              <div style={{width:130,height:130,borderRadius:18,
+              <div style={{width:120,height:120,borderRadius:16,
                 background:'linear-gradient(135deg,#2563eb,#7c3aed)',
                 display:'flex',alignItems:'center',justifyContent:'center',
                 boxShadow:'0 20px 60px rgba(0,0,0,0.5)'}}>
-                <Ic.Music s={50} c="text-white" style={{opacity:0.5}}/>
+                <Ic.Music s={46} c="text-white"/>
               </div>
             )}
-            {/* Gloss overlay */}
-            <div style={{position:'absolute',inset:0,borderRadius:18,
+            <div style={{position:'absolute',inset:0,borderRadius:16,
               background:'linear-gradient(135deg,rgba(255,255,255,0.18) 0%,transparent 55%)',
               pointerEvents:'none'}}/>
           </div>
-
-          <div style={{marginTop:12,color:'#a78bfa',display:'flex',alignItems:'center',gap:8,opacity:answered?0.45:1}}>
-            <MusicBars playing={!answered && isAudioPlaying} cls="text-purple-400"/>
-            <span style={{color:'rgba(255,255,255,0.55)',fontSize:13}}>
+          <div style={{marginTop:10,color:'#a78bfa',display:'flex',alignItems:'center',gap:7,opacity:answered?0.45:1}}>
+            <MusicBars playing={!answered&&isAudioPlaying} cls="text-purple-400"/>
+            <span style={{color:'rgba(255,255,255,0.5)',fontSize:12}}>
               {answered ? 'Zatrzymano' : 'Odtwarza się...'}
             </span>
           </div>
-          <p style={{color:'rgba(255,255,255,0.6)',fontSize:14,fontWeight:600,marginTop:6}}>
+          <p style={{color:'rgba(255,255,255,0.65)',fontSize:14,fontWeight:600,marginTop:5}}>
             🎵 Jaki to utwór?
           </p>
         </div>
 
         {/* Options */}
-        <div style={{display:'flex',flexDirection:'column',gap:11}}>
-          {options.map((opt, idx) => {
-            const isCorrect = opt.trackId === correctId;
-            const isWrong = selectedOption && opt.trackId === selectedOption.trackId && !isCorrect;
-            const earnedPts = isCorrect && selectedOption && selectedOption.trackId === correctId
-              ? BASE_PTS + Math.floor(timeLeft) * TIME_MULT : null;
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          {options.map((opt,idx) => {
+            const isCorr = opt.trackId === correctId;
+            const isWrong = selectedOption && opt.trackId === selectedOption.trackId && !isCorr;
             return (
-              <button
-                key={opt.trackId + '-' + idx}
-                onClick={() => onAnswer(opt)}
-                disabled={answered}
+              <button key={opt.trackId+'-'+idx} onClick={() => onAnswer(opt)} disabled={answered}
                 className={`glossy-btn ${optCls(opt)} ${optAnim(opt)}`}
-                style={{
-                  borderRadius:16,padding:'14px 16px',
-                  textAlign:'left',display:'flex',alignItems:'center',gap:12,
-                  width:'100%',cursor:answered?'default':'pointer',
-                  transition:'all 0.2s',
-                }}
-              >
+                style={{borderRadius:15,padding:'13px 15px',textAlign:'left',
+                  display:'flex',alignItems:'center',gap:11,width:'100%',
+                  cursor:answered?'default':'pointer',transition:'all 0.2s'}}>
                 <div style={{
-                  width:32,height:32,borderRadius:'50%',flexShrink:0,
-                  display:'flex',alignItems:'center',justifyContent:'center',
-                  fontWeight:900,fontSize:13,
-                  background: answered && isCorrect ? 'rgba(34,197,94,0.3)'
-                    : answered && isWrong ? 'rgba(239,68,68,0.3)'
-                    : 'rgba(255,255,255,0.1)',
-                  color: answered && isCorrect ? '#4ade80'
-                    : answered && isWrong ? '#f87171'
-                    : 'rgba(255,255,255,0.55)',
+                  width:30,height:30,borderRadius:'50%',flexShrink:0,
+                  display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:12,
+                  background: answered&&isCorr?'rgba(34,197,94,0.3)':answered&&isWrong?'rgba(239,68,68,0.3)':'rgba(255,255,255,0.1)',
+                  color: answered&&isCorr?'#4ade80':answered&&isWrong?'#f87171':'rgba(255,255,255,0.55)',
                 }}>
-                  {answered && isCorrect ? <Ic.Check s={15}/>
-                    : answered && isWrong ? <Ic.X s={15}/>
-                    : String.fromCharCode(65 + idx)}
+                  {answered&&isCorr?<Ic.Check s={14}/>:answered&&isWrong?<Ic.X s={14}/>:String.fromCharCode(65+idx)}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{color:'#fff',fontWeight:700,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                  <div style={{color:'#fff',fontWeight:700,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                     {opt.trackName}
                   </div>
-                  <div style={{color:'rgba(255,255,255,0.55)',fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                  <div style={{color:'rgba(255,255,255,0.5)',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                     {opt.artistName}
                   </div>
                 </div>
-                {answered && isCorrect && selectedOption && selectedOption.trackId === opt.trackId && (
-                  <div style={{flexShrink:0,color:'#4ade80',fontWeight:800,fontSize:13}}>
-                    +{BASE_PTS + Math.floor(timeLeft)*TIME_MULT}
+                {answered && isCorr && selectedOption?.trackId === opt.trackId && (
+                  <div style={{flexShrink:0,color:'#4ade80',fontWeight:800,fontSize:12}}>
+                    +{lastRoundScore}{multiplier>1?' ×2':''}
                   </div>
                 )}
               </button>
@@ -425,123 +515,144 @@ function PlayingScreen({ round, score, currentSong, options, timeLeft, answered,
 }
 
 /* ── RESULT SCREEN ── */
-function ResultScreen({ score, highScore, isNewHS, history, onPlayAgain }) {
+function ResultScreen({ score, isNewHS, history, leaderboard, lbPosition, decadeId, onPlayAgain }) {
   const maxScore = TOTAL_ROUNDS * (BASE_PTS + ROUND_TIME * TIME_MULT);
   const pct = Math.round((score / maxScore) * 100);
   const correct = history.filter(h => h.correct).length;
-
-  const rank = pct >= 90 ? ['🏆','Legenda!','#fbbf24']
-    : pct >= 70 ? ['🌟','Mistrz!','#a78bfa']
-    : pct >= 50 ? ['🎵','Ekspert!','#60a5fa']
-    : pct >= 30 ? ['🎶','Amator','#34d399']
-    : ['🎸','Nowicjusz','#fb923c'];
+  const maxCombo = history.reduce((acc,h,i) => {
+    if (!h.correct) return acc;
+    let run = 1;
+    for (let j=i+1; j<history.length && history[j].correct; j++) run++;
+    return Math.max(acc, run);
+  }, 0);
+  const dec = DECADES.find(d => d.id === decadeId) || DECADES[2];
+  const medals = ['🥇','🥈','🥉'];
+  const rank = pct>=90?['🏆','Legenda!','#fbbf24']:pct>=70?['🌟','Mistrz!','#a78bfa']:pct>=50?['🎵','Ekspert!','#60a5fa']:pct>=30?['🎶','Amator','#34d399']:['🎸','Nowicjusz','#fb923c'];
 
   return (
     <div className="bg-game" style={{minHeight:'100vh',padding:16,overflowY:'auto'}}>
-      <div className="fade-in-up" style={{maxWidth:460,margin:'0 auto',paddingTop:24,paddingBottom:32,display:'flex',flexDirection:'column',gap:18}}>
+      <div className="fade-in-up" style={{maxWidth:460,margin:'0 auto',paddingTop:20,paddingBottom:32,display:'flex',flexDirection:'column',gap:16}}>
 
         {/* Header */}
         <div style={{textAlign:'center'}}>
-          <div style={{fontSize:52,marginBottom:10}}>🏁</div>
-          <h2 style={{fontSize:30,fontWeight:900,color:'#fff',margin:'0 0 4px'}}>Koniec gry!</h2>
-          <p style={{color:'rgba(255,255,255,0.5)',margin:0,fontSize:14}}>Oto twoje wyniki</p>
+          <div style={{fontSize:48,marginBottom:8}}>🏁</div>
+          <h2 style={{fontSize:28,fontWeight:900,color:'#fff',margin:'0 0 3px'}}>Koniec gry!</h2>
+          <p style={{color:'rgba(255,255,255,0.45)',margin:0,fontSize:13}}>{dec.emoji} {dec.label}</p>
         </div>
 
         {/* Score card */}
-        <div className="card-glass" style={{borderRadius:24,padding:28,textAlign:'center',boxShadow:'0 20px 60px rgba(0,0,0,0.3),0 0 40px rgba(139,92,246,0.15)'}}>
+        <div className="card-glass" style={{borderRadius:22,padding:24,textAlign:'center',
+          boxShadow:`0 20px 60px rgba(0,0,0,0.3),0 0 40px ${dec.glow}30`}}>
           {isNewHS && (
-            <div style={{
-              display:'inline-flex',alignItems:'center',gap:8,marginBottom:14,
-              background:'rgba(251,191,36,0.15)',borderRadius:9999,
-              padding:'6px 16px',border:'1px solid rgba(251,191,36,0.3)'
-            }}>
-              <Ic.Trophy s={15} c="text-yellow-400"/>
-              <span style={{color:'#fbbf24',fontWeight:700,fontSize:13}}>NOWY REKORD!</span>
+            <div style={{display:'inline-flex',alignItems:'center',gap:8,marginBottom:12,
+              background:'rgba(251,191,36,0.15)',borderRadius:9999,padding:'5px 14px',
+              border:'1px solid rgba(251,191,36,0.3)'}}>
+              <Ic.Trophy s={14} c="text-yellow-400"/>
+              <span style={{color:'#fbbf24',fontWeight:700,fontSize:12}}>NOWY REKORD!</span>
             </div>
           )}
-          <div style={{
-            fontSize:64,fontWeight:900,lineHeight:1,marginBottom:4,
+          {lbPosition && (
+            <div style={{display:'inline-flex',alignItems:'center',gap:8,marginBottom:12,
+              background:'rgba(139,92,246,0.15)',borderRadius:9999,padding:'5px 14px',
+              border:'1px solid rgba(139,92,246,0.3)',marginLeft:8}}>
+              <span style={{fontSize:14}}>{medals[lbPosition-1] || `#${lbPosition}`}</span>
+              <span style={{color:'#a78bfa',fontWeight:700,fontSize:12}}>#{lbPosition} w tabeli</span>
+            </div>
+          )}
+          <div style={{fontSize:60,fontWeight:900,lineHeight:1,marginBottom:4,
             background:'linear-gradient(90deg,#60a5fa,#a78bfa)',
-            WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'
-          }}>
+            WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
             {score.toLocaleString()}
           </div>
-          <div style={{color:'rgba(255,255,255,0.4)',fontSize:14,marginBottom:18}}>punktów</div>
-          <div style={{fontSize:24,fontWeight:700,marginBottom:18,color:rank[2]}}>
-            {rank[0]} {rank[1]}
+          <div style={{color:'rgba(255,255,255,0.35)',fontSize:13,marginBottom:16}}>punktów</div>
+          <div style={{fontSize:22,fontWeight:700,marginBottom:16,color:rank[2]}}>{rank[0]} {rank[1]}</div>
+          <div style={{width:'100%',height:9,background:'rgba(255,255,255,0.1)',borderRadius:9999,overflow:'hidden',marginBottom:6}}>
+            <div style={{height:'100%',borderRadius:9999,
+              background:`linear-gradient(90deg,${dec.color},#8b5cf6)`,
+              width:`${pct}%`,transition:'width 1.2s ease-out'}}/>
           </div>
-          <div style={{width:'100%',height:10,background:'rgba(255,255,255,0.1)',borderRadius:9999,overflow:'hidden',marginBottom:8}}>
-            <div style={{
-              height:'100%',borderRadius:9999,
-              background:'linear-gradient(90deg,#3b82f6,#8b5cf6)',
-              width:`${pct}%`,transition:'width 1.2s ease-out'
-            }}/>
-          </div>
-          <div style={{color:'rgba(255,255,255,0.35)',fontSize:12}}>{pct}% maksymalnego wyniku</div>
+          <div style={{color:'rgba(255,255,255,0.3)',fontSize:11}}>{pct}% maksymalnego wyniku</div>
         </div>
 
         {/* Stats */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
           {[
             ['Poprawne', correct, '#4ade80'],
-            ['Błędne', TOTAL_ROUNDS - correct, '#f87171'],
-            ['Rekord', highScore.toLocaleString(), '#fbbf24'],
-          ].map(([label, val, col], i) => (
-            <div key={i} className="card-glass" style={{borderRadius:16,padding:'14px 10px',textAlign:'center'}}>
-              <div style={{fontSize:24,fontWeight:900,color:col,marginBottom:3}}>{val}</div>
-              <div style={{color:'rgba(255,255,255,0.45)',fontSize:11}}>{label}</div>
+            ['Błędne', TOTAL_ROUNDS-correct, '#f87171'],
+            ['Max combo', maxCombo, '#fb923c'],
+          ].map(([label,val,col],i) => (
+            <div key={i} className="card-glass" style={{borderRadius:14,padding:'12px 8px',textAlign:'center'}}>
+              <div style={{fontSize:22,fontWeight:900,color:col,marginBottom:2}}>{val}{i===2&&val>=COMBO_THRESHOLD?'🔥':''}</div>
+              <div style={{color:'rgba(255,255,255,0.4)',fontSize:11}}>{label}</div>
             </div>
           ))}
         </div>
 
-        {/* Round history */}
-        <div className="card-glass" style={{borderRadius:18,overflow:'hidden'}}>
-          <div style={{padding:'12px 16px',borderBottom:'1px solid rgba(255,255,255,0.08)'}}>
-            <span style={{color:'rgba(255,255,255,0.8)',fontWeight:700,fontSize:14}}>Historia rund</span>
-          </div>
-          <div>
-            {history.map((item, i) => (
-              <div key={i} style={{
-                display:'flex',alignItems:'center',gap:12,
-                padding:'11px 16px',
-                borderBottom: i < history.length-1 ? '1px solid rgba(255,255,255,0.05)' : 'none'
+        {/* Leaderboard */}
+        {leaderboard.length > 0 && (
+          <div className="card-glass" style={{borderRadius:18,overflow:'hidden'}}>
+            <div style={{padding:'11px 16px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',gap:7}}>
+              <Ic.Trophy s={15} c="text-yellow-400"/>
+              <span style={{color:'rgba(255,255,255,0.8)',fontWeight:700,fontSize:13}}>Tabela wyników</span>
+            </div>
+            {leaderboard.slice(0,5).map((e,i) => (
+              <div key={i} style={{display:'flex',alignItems:'center',gap:11,padding:'9px 16px',
+                borderBottom: i<Math.min(leaderboard.length,5)-1?'1px solid rgba(255,255,255,0.05)':'none',
+                background: e.score===score&&i===(lbPosition-1) ? 'rgba(139,92,246,0.12)' : i===0?'rgba(251,191,36,0.05)':'transparent',
               }}>
-                <div style={{
-                  width:24,height:24,borderRadius:'50%',flexShrink:0,
-                  display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,
-                  background: item.correct ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
-                  color: item.correct ? '#4ade80' : '#f87171',
-                }}>
-                  {item.correct ? '✓' : '✗'}
+                <span style={{fontSize:16,width:22,textAlign:'center'}}>{medals[i]||`${i+1}`}</span>
+                <div style={{flex:1}}>
+                  <span style={{color:i===0?'#fbbf24':i===1?'#e2e8f0':i===2?'#fb923c':'rgba(255,255,255,0.55)',fontWeight:700,fontSize:14}}>
+                    {e.score.toLocaleString()}
+                  </span>
+                  <span style={{color:'rgba(255,255,255,0.25)',fontSize:10,marginLeft:6}}>pkt</span>
                 </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{color:'#fff',fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                    {item.song.trackName}
-                  </div>
-                  <div style={{color:'rgba(255,255,255,0.4)',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                    {item.song.artistName}
-                  </div>
-                </div>
-                <div style={{
-                  flexShrink:0,fontWeight:800,fontSize:13,
-                  color: item.correct ? '#4ade80' : '#f87171'
-                }}>
-                  {item.correct ? `+${item.score}` : '0'}
+                <div style={{display:'flex',alignItems:'center',gap:4}}>
+                  <span style={{fontSize:12}}>{DECADES.find(d=>d.id===e.decade)?.emoji||'🎵'}</span>
+                  <span style={{color:'rgba(255,255,255,0.3)',fontSize:10}}>{e.date}</span>
                 </div>
               </div>
             ))}
           </div>
+        )}
+
+        {/* Round history */}
+        <div className="card-glass" style={{borderRadius:18,overflow:'hidden'}}>
+          <div style={{padding:'11px 16px',borderBottom:'1px solid rgba(255,255,255,0.08)'}}>
+            <span style={{color:'rgba(255,255,255,0.8)',fontWeight:700,fontSize:13}}>Historia rund</span>
+          </div>
+          {history.map((item,i) => (
+            <div key={i} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 16px',
+              borderBottom: i<history.length-1?'1px solid rgba(255,255,255,0.05)':'none'}}>
+              <div style={{width:22,height:22,borderRadius:'50%',flexShrink:0,
+                display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,
+                background:item.correct?'rgba(34,197,94,0.2)':'rgba(239,68,68,0.2)',
+                color:item.correct?'#4ade80':'#f87171'}}>
+                {item.correct?'✓':'✗'}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{color:'#fff',fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                  {item.song.trackName}
+                </div>
+                <div style={{color:'rgba(255,255,255,0.35)',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                  {item.song.artistName}
+                </div>
+              </div>
+              <div style={{flexShrink:0,fontWeight:800,fontSize:12,color:item.correct?'#4ade80':'#f87171'}}>
+                {item.correct?`+${item.score}`:'0'}{item.multiplier>1?' 🔥':''}
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* Play again */}
         <button onClick={onPlayAgain} className="glossy-btn" style={{
-          width:'100%',padding:'18px 0',borderRadius:18,fontSize:18,fontWeight:900,
+          width:'100%',padding:'17px 0',borderRadius:18,fontSize:17,fontWeight:900,
           color:'#fff',border:'none',cursor:'pointer',
           display:'flex',alignItems:'center',justifyContent:'center',gap:10,
           background:'linear-gradient(135deg,#3b82f6 0%,#7c3aed 50%,#8b5cf6 100%)',
           boxShadow:'0 10px 40px rgba(139,92,246,0.5)',
         }}>
-          <Ic.Refresh s={20}/> ZAGRAJ PONOWNIE
+          <Ic.Refresh s={19}/> ZAGRAJ PONOWNIE
         </button>
       </div>
     </div>
@@ -550,48 +661,50 @@ function ResultScreen({ score, highScore, isNewHS, history, onPlayAgain }) {
 
 /* ── MAIN APP ── */
 function App() {
-  const [gameState, setGameState] = useState('START_SCREEN');
-  const [songs, setSongs] = useState([]);
-  const [roundIndex, setRoundIndex] = useState(0);
-  const [score, setScore] = useState(0);
-  const [currentSong, setCurrentSong] = useState(null);
-  const [options, setOptions] = useState([]);
-  const [timeLeft, setTimeLeft] = useState(ROUND_TIME);
-  const [answered, setAnswered] = useState(false);
+  const [gameState, setGameState]       = useState('START_SCREEN');
+  const [roundIndex, setRoundIndex]     = useState(0);
+  const [score, setScore]               = useState(0);
+  const [currentSong, setCurrentSong]   = useState(null);
+  const [options, setOptions]           = useState([]);
+  const [timeLeft, setTimeLeft]         = useState(ROUND_TIME);
+  const [answered, setAnswered]         = useState(false);
   const [selectedOption, setSelectedOption] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [isMuted, setIsMuted] = useState(false);
-  const [audioError, setAudioError] = useState(false);
+  const [history, setHistory]           = useState([]);
+  const [isMuted, setIsMuted]           = useState(false);
+  const [audioError, setAudioError]     = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [highScore, setHighScore] = useState(() => parseInt(localStorage.getItem('mcHS') || '0'));
-  const [isNewHS, setIsNewHS] = useState(false);
-  const [roundKey, setRoundKey] = useState(0);
+  const [leaderboard, setLeaderboard]   = useState(() => getLB());
+  const [isNewHS, setIsNewHS]           = useState(false);
+  const [lbPosition, setLbPosition]     = useState(null);
+  const [roundKey, setRoundKey]         = useState(0);
   const [lastRoundScore, setLastRoundScore] = useState(0);
   const [showRoundScore, setShowRoundScore] = useState(false);
+  const [combo, setCombo]               = useState(0);
+  const [multiplier, setMultiplier]     = useState(1);
+  const [selectedDecade, setSelectedDecade] = useState(null);
 
-  /* refs to avoid stale closures */
-  const audioRef = useRef(new Audio());
-  const answeredRef = useRef(false);
-  const timeLeftRef = useRef(ROUND_TIME);
-  const songsRef = useRef([]);
-  const currentSongRef = useRef(null);
-  const scoreRef = useRef(0);
-  const historyRef = useRef([]);
-  const isMutedRef = useRef(false);
-  const roundIndexRef = useRef(0);
-  const highScoreRef = useRef(parseInt(localStorage.getItem('mcHS') || '0'));
+  /* refs */
+  const audioRef        = useRef(new Audio());
+  const answeredRef     = useRef(false);
+  const timeLeftRef     = useRef(ROUND_TIME);
+  const songsRef        = useRef([]);
+  const currentSongRef  = useRef(null);
+  const scoreRef        = useRef(0);
+  const historyRef      = useRef([]);
+  const isMutedRef      = useRef(false);
+  const roundIndexRef   = useRef(0);
+  const comboRef        = useRef(0);
 
-  /* ── load round ── */
+  /* ── loadRound ── */
   const loadRound = useCallback((idx, songList) => {
     const pool = [...songList].sort(() => Math.random() - 0.5);
     const correct = pool[0];
-    const wrongs = pool.slice(1, 4);
-    const allOpts = [correct, ...wrongs].sort(() => Math.random() - 0.5);
+    const allOpts = [correct, ...pool.slice(1,4)].sort(() => Math.random() - 0.5);
 
     currentSongRef.current = correct;
-    answeredRef.current = false;
-    timeLeftRef.current = ROUND_TIME;
-    roundIndexRef.current = idx;
+    answeredRef.current    = false;
+    timeLeftRef.current    = ROUND_TIME;
+    roundIndexRef.current  = idx;
 
     setCurrentSong(correct);
     setOptions(allOpts);
@@ -604,7 +717,6 @@ function App() {
     setRoundKey(k => k + 1);
     setGameState('PLAYING');
 
-    /* play audio */
     const audio = audioRef.current;
     audio.pause();
     audio.src = correct.previewUrl;
@@ -612,22 +724,30 @@ function App() {
     audio.play().then(() => setIsAudioPlaying(true)).catch(() => setAudioError(true));
   }, []);
 
-  /* ── handle answer ── */
+  /* ── handleAnswer ── */
   const handleAnswer = useCallback((option) => {
     if (answeredRef.current) return;
     answeredRef.current = true;
 
-    const correct = currentSongRef.current;
-    const isCorrect = option !== null && option.trackId === correct.trackId;
-    const timeBonus = Math.floor(timeLeftRef.current) * TIME_MULT;
-    const roundScore = isCorrect ? BASE_PTS + timeBonus : 0;
+    const correct    = currentSongRef.current;
+    const isCorrect  = option !== null && option.trackId === correct.trackId;
+
+    /* combo first: new combo determines multiplier */
+    const newCombo   = isCorrect ? comboRef.current + 1 : 0;
+    const mult       = newCombo >= COMBO_THRESHOLD ? 2 : 1;
+    comboRef.current = newCombo;
+
+    const timeBonus  = Math.floor(timeLeftRef.current) * TIME_MULT;
+    const roundScore = isCorrect ? (BASE_PTS + timeBonus) * mult : 0;
 
     scoreRef.current += roundScore;
     const newScore = scoreRef.current;
 
-    const result = { song: correct, correct: isCorrect, score: roundScore };
+    const result = { song: correct, correct: isCorrect, score: roundScore, multiplier: mult };
     historyRef.current = [...historyRef.current, result];
 
+    setCombo(newCombo);
+    setMultiplier(mult);
     setAnswered(true);
     setSelectedOption(option);
     setScore(newScore);
@@ -636,25 +756,25 @@ function App() {
     setShowRoundScore(true);
     setTimeout(() => setShowRoundScore(false), 1900);
 
-    const audio = audioRef.current;
-
     setTimeout(() => {
-      audio.pause();
+      audioRef.current.pause();
       const nextIdx = roundIndexRef.current + 1;
       if (nextIdx >= TOTAL_ROUNDS) {
-        /* game over */
-        if (newScore > highScoreRef.current) {
-          highScoreRef.current = newScore;
-          localStorage.setItem('mcHS', String(newScore));
-          setHighScore(newScore);
-          setIsNewHS(true);
-        }
+        /* save to leaderboard */
+        const today = new Date().toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit',year:'2-digit'});
+        const newLB = saveLB({ score: newScore, decade: selectedDecade, date: today });
+        setLeaderboard(newLB);
+        const pos = newLB.findIndex(e => e.score === newScore);
+        setLbPosition(pos === -1 ? null : pos + 1);
+        /* new high score? */
+        const prevBest = getLB().find(e => e.score > newScore);
+        setIsNewHS(!prevBest && newLB[0].score === newScore && newLB.filter(e=>e.score===newScore).length===1);
         setGameState('RESULT_SCREEN');
       } else {
         loadRound(nextIdx, songsRef.current);
       }
     }, 2000);
-  }, [loadRound]);
+  }, [loadRound, selectedDecade]);
 
   /* ── timer ── */
   useEffect(() => {
@@ -671,30 +791,34 @@ function App() {
     return () => clearInterval(interval);
   }, [roundKey, gameState, handleAnswer]);
 
-  /* ── fetch songs ── */
-  const fetchSongs = useCallback(async () => {
+  /* ── fetchSongs ── */
+  const fetchSongs = useCallback(async (decadeId) => {
+    setSelectedDecade(decadeId);
     setGameState('LOADING');
-    const terms = ['pop','rock','hits 2024','hip hop','indie pop'];
-    const term = terms[Math.floor(Math.random() * terms.length)];
+    const dec   = DECADES.find(d => d.id === decadeId);
+    const terms = dec ? dec.terms : ['pop hits'];
+    const term  = terms[Math.floor(Math.random() * terms.length)];
     try {
-      const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=50&country=US`);
+      const res  = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=50&country=US`);
       if (!res.ok) throw new Error('API error');
       const data = await res.json();
       const valid = data.results.filter(s => s.previewUrl && s.trackName && s.artistName);
-      if (valid.length < 10) throw new Error('Too few songs');
-      setSongs(valid);
+      if (valid.length < 10) throw new Error('Too few songs with previews');
       songsRef.current = valid;
 
-      /* reset game */
-      scoreRef.current = 0;
+      scoreRef.current  = 0;
       historyRef.current = [];
+      comboRef.current  = 0;
       setScore(0);
       setHistory([]);
+      setCombo(0);
+      setMultiplier(1);
       setIsNewHS(false);
+      setLbPosition(null);
       loadRound(0, valid);
     } catch (err) {
       console.error(err);
-      alert('Nie udało się załadować piosenek. Sprawdź połączenie i spróbuj ponownie.');
+      alert('Nie udało się załadować piosenek. Spróbuj ponownie.');
       setGameState('START_SCREEN');
     }
   }, [loadRound]);
@@ -708,34 +832,27 @@ function App() {
     });
   }, []);
 
-  /* cleanup audio on unmount */
   useEffect(() => () => { audioRef.current.pause(); }, []);
 
   /* ── render ── */
-  if (gameState === 'START_SCREEN') return <StartScreen onStart={fetchSongs} highScore={highScore}/>;
-  if (gameState === 'LOADING')      return <LoadingScreen/>;
-  if (gameState === 'RESULT_SCREEN') return (
-    <ResultScreen
-      score={score} highScore={highScore} isNewHS={isNewHS}
-      history={history} onPlayAgain={() => setGameState('START_SCREEN')}
-    />
-  );
+  if (gameState === 'START_SCREEN')
+    return <StartScreen onStart={fetchSongs} leaderboard={leaderboard}/>;
+  if (gameState === 'LOADING')
+    return <LoadingScreen decade={selectedDecade}/>;
+  if (gameState === 'RESULT_SCREEN')
+    return <ResultScreen score={score} isNewHS={isNewHS} history={history}
+      leaderboard={leaderboard} lbPosition={lbPosition} decadeId={selectedDecade}
+      onPlayAgain={() => setGameState('START_SCREEN')}/>;
+
   return (
     <PlayingScreen
-      round={roundIndex}
-      score={score}
-      currentSong={currentSong}
-      options={options}
-      timeLeft={timeLeft}
-      answered={answered}
-      selectedOption={selectedOption}
-      onAnswer={handleAnswer}
-      isMuted={isMuted}
-      onToggleMute={handleToggleMute}
-      isAudioPlaying={isAudioPlaying}
-      audioError={audioError}
-      lastRoundScore={lastRoundScore}
-      showRoundScore={showRoundScore}
+      round={roundIndex} score={score}
+      currentSong={currentSong} options={options}
+      timeLeft={timeLeft} answered={answered} selectedOption={selectedOption}
+      onAnswer={handleAnswer} isMuted={isMuted} onToggleMute={handleToggleMute}
+      isAudioPlaying={isAudioPlaying} audioError={audioError}
+      lastRoundScore={lastRoundScore} showRoundScore={showRoundScore}
+      combo={combo} multiplier={multiplier} decadeId={selectedDecade}
     />
   );
 }
