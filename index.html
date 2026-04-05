@@ -76,15 +76,36 @@ const TIME_MULT = 100;
 const COMBO_THRESHOLD = 3;
 const LB_KEY = 'mcLB';
 
-/* ── Decades config ── */
-const DECADES = [
-  { id:'80s', emoji:'🕺', label:'Lata 80.',       color:'#f59e0b', glow:'rgba(245,158,11,0.5)',
-    terms:['80s pop hits','michael jackson','madonna 80s','prince 80s'] },
-  { id:'90s', emoji:'💿', label:'Lata 90.',       color:'#10b981', glow:'rgba(16,185,129,0.5)',
-    terms:['90s hits','nirvana','spice girls','backstreet boys','90s pop'] },
-  { id:'now', emoji:'🔥', label:'Współczesny Pop', color:'#a78bfa', glow:'rgba(167,139,250,0.5)',
-    terms:['pop 2023','taylor swift','dua lipa','pop hits 2024'] },
+/* ── Categories config ── */
+const CATEGORIES = [
+  { id:'pop',    emoji:'🎵', label:'Pop',            color:'#ec4899', glow:'rgba(236,72,153,0.5)',
+    terms:['pop hits 2024','taylor swift','dua lipa','ariana grande','ed sheeran'] },
+  { id:'rock',   emoji:'🎸', label:'Rock',           color:'#ef4444', glow:'rgba(239,68,68,0.5)',
+    terms:['rock classics','queen','foo fighters','the killers','coldplay rock'] },
+  { id:'metal',  emoji:'🤘', label:'Metal',          color:'#6366f1', glow:'rgba(99,102,241,0.5)',
+    terms:['metallica','iron maiden','black sabbath','heavy metal classic','slayer'] },
+  { id:'electro',emoji:'⚡', label:'Electro',        color:'#06b6d4', glow:'rgba(6,182,212,0.5)',
+    terms:['daft punk','deadmau5','electronic music','aphex twin','prodigy'] },
+  { id:'80s',    emoji:'🕺', label:'Lata 80.',       color:'#f59e0b', glow:'rgba(245,158,11,0.5)',
+    terms:['80s pop hits','michael jackson','madonna 80s','prince 80s','david bowie 80s'] },
+  { id:'90s',    emoji:'💿', label:'Lata 90.',       color:'#10b981', glow:'rgba(16,185,129,0.5)',
+    terms:['90s hits','nirvana','spice girls','backstreet boys','britney spears 90s'] },
 ];
+/* backward compat alias */
+const DECADES = CATEGORIES;
+
+/* ── Recent artists (localStorage) ── */
+const ART_KEY = 'mcArtists';
+function getRecentArtists() {
+  try { return JSON.parse(localStorage.getItem(ART_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveRecentArtist(name) {
+  const list = getRecentArtists().filter(a => a.toLowerCase() !== name.toLowerCase());
+  list.unshift(name);
+  if (list.length > 6) list.length = 6;
+  localStorage.setItem(ART_KEY, JSON.stringify(list));
+}
 
 /* ── Leaderboard helpers ── */
 function getLB() {
@@ -151,20 +172,23 @@ function TimerBar({ timeLeft, answered }) {
 }
 
 /* ── LOADING ── */
-function LoadingScreen({ decade }) {
-  const dec = DECADES.find(d => d.id === decade) || DECADES[2];
+function LoadingScreen({ categoryId, artistName }) {
+  const cat = CATEGORIES.find(d => d.id === categoryId);
+  const label = artistName ? `"${artistName}"` : (cat ? cat.label : 'muzyki');
+  const emoji = artistName ? '🎤' : (cat ? cat.emoji : '🎵');
+  const color = cat ? cat.color : '#a78bfa';
   return (
     <div className="bg-game flex items-center justify-center min-h-screen">
       <div style={{textAlign:'center'}}>
         <div style={{position:'relative',width:88,height:88,margin:'0 auto 20px'}}>
           <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'4px solid rgba(139,92,246,0.25)'}}/>
-          <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'4px solid transparent',borderTopColor:dec.color}} className="spin-slow"/>
+          <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'4px solid transparent',borderTopColor:color}} className="spin-slow"/>
           <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:32}}>
-            {dec.emoji}
+            {emoji}
           </div>
         </div>
         <p style={{color:'rgba(255,255,255,0.85)',fontSize:20,fontWeight:700,margin:0}}>
-          Ładowanie {dec.label}...
+          Ładowanie {label}...
         </p>
         <p style={{color:'rgba(255,255,255,0.4)',fontSize:13,marginTop:6}}>iTunes Search API</p>
       </div>
@@ -174,97 +198,166 @@ function LoadingScreen({ decade }) {
 
 /* ── START SCREEN ── */
 function StartScreen({ onStart, leaderboard }) {
-  const [decade, setDecade] = useState(null);
-  const dec = DECADES.find(d => d.id === decade);
+  const [tab, setTab]           = useState('cat');   // 'cat' | 'artist'
+  const [catId, setCatId]       = useState(null);
+  const [artistInput, setArtistInput] = useState('');
+  const [recentArtists, setRecentArtists] = useState(() => getRecentArtists());
 
+  const cat    = CATEGORIES.find(d => d.id === catId);
   const medals = ['🥇','🥈','🥉'];
-  const decadeLabel = id => DECADES.find(d=>d.id===id)?.emoji + ' ' + (DECADES.find(d=>d.id===id)?.label || id);
+  const canPlay = tab === 'cat' ? !!catId : artistInput.trim().length >= 2;
+
+  const handlePlay = () => {
+    if (!canPlay) return;
+    if (tab === 'artist') {
+      const name = artistInput.trim();
+      saveRecentArtist(name);
+      setRecentArtists(getRecentArtists());
+      onStart(null, name);
+    } else {
+      onStart(catId, null);
+    }
+  };
+
+  const tabBtn = (id, label) => (
+    <button onClick={() => setTab(id)} style={{
+      flex:1, padding:'10px 0', borderRadius:12, border:'none', cursor:'pointer',
+      fontWeight:700, fontSize:13, transition:'all 0.2s',
+      background: tab===id ? 'rgba(139,92,246,0.35)' : 'transparent',
+      color: tab===id ? '#c4b5fd' : 'rgba(255,255,255,0.45)',
+      boxShadow: tab===id ? 'inset 0 0 0 1px rgba(139,92,246,0.5)' : 'none',
+    }}>{label}</button>
+  );
 
   return (
-    <div className="bg-game" style={{minHeight:'100vh',padding:'20px 16px',overflowY:'auto',position:'relative'}}>
-      {/* bg blobs */}
+    <div className="bg-game" style={{minHeight:'100vh',padding:'16px 16px 24px',overflowY:'auto',position:'relative'}}>
       <div style={{position:'fixed',top:30,left:20,width:180,height:180,borderRadius:'50%',background:'rgba(59,130,246,0.07)',filter:'blur(40px)',pointerEvents:'none'}}/>
       <div style={{position:'fixed',bottom:60,right:20,width:240,height:240,borderRadius:'50%',background:'rgba(139,92,246,0.09)',filter:'blur(50px)',pointerEvents:'none'}}/>
 
-      <div className="fade-in-up" style={{maxWidth:440,margin:'0 auto',display:'flex',flexDirection:'column',gap:20}}>
+      <div className="fade-in-up" style={{maxWidth:440,margin:'0 auto',display:'flex',flexDirection:'column',gap:16}}>
 
         {/* Logo + Title */}
-        <div style={{textAlign:'center',paddingTop:16}}>
+        <div style={{textAlign:'center',paddingTop:10}}>
           <div className="pulse-glow" style={{
-            width:110,height:110,borderRadius:'50%',margin:'0 auto 18px',
+            width:100,height:100,borderRadius:'50%',margin:'0 auto 14px',
             background:'linear-gradient(135deg,#3b82f6,#7c3aed)',
             display:'flex',alignItems:'center',justifyContent:'center',position:'relative',
             boxShadow:'0 10px 40px rgba(139,92,246,0.5)',
           }}>
-            <Ic.Music s={52} c="text-white"/>
+            <Ic.Music s={46} c="text-white"/>
             <div style={{position:'absolute',inset:0,borderRadius:'50%',background:'linear-gradient(135deg,rgba(255,255,255,0.28) 0%,transparent 60%)'}}/>
           </div>
-          <h1 style={{fontSize:48,fontWeight:900,color:'#fff',margin:'0 0 4px',letterSpacing:-1,textShadow:'0 0 30px rgba(139,92,246,0.7)'}}>
+          <h1 style={{fontSize:44,fontWeight:900,color:'#fff',margin:'0 0 3px',letterSpacing:-1,textShadow:'0 0 30px rgba(139,92,246,0.7)'}}>
             MUSIC
           </h1>
-          <h2 style={{fontSize:28,fontWeight:900,margin:'0 0 8px',background:'linear-gradient(90deg,#60a5fa,#a78bfa,#f0abfc)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
+          <h2 style={{fontSize:26,fontWeight:900,margin:'0 0 6px',background:'linear-gradient(90deg,#60a5fa,#a78bfa,#f0abfc)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>
             CHALLENGE
           </h2>
-          <p style={{color:'rgba(255,255,255,0.5)',fontSize:13,margin:0}}>
-            Zgadnij 10 piosenek i zdobądź jak najwięcej punktów!
+          <p style={{color:'rgba(255,255,255,0.45)',fontSize:12,margin:0}}>
+            Zgadnij 10 piosenek · Combo ×2 · Tabela rekordów
           </p>
         </div>
 
-        {/* Decade selector */}
-        <div className="card-glass" style={{borderRadius:20,padding:16}}>
-          <p style={{color:'rgba(255,255,255,0.7)',fontWeight:700,fontSize:13,margin:'0 0 12px',textAlign:'center'}}>
-            🎶 Wybierz epokę muzyczną
-          </p>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
-            {DECADES.map(d => {
-              const active = decade === d.id;
-              return (
-                <button key={d.id} onClick={() => setDecade(d.id)}
-                  className="glossy-btn"
-                  style={{
-                    borderRadius:14,padding:'14px 8px',border:'2px solid',
-                    borderColor: active ? d.color : 'rgba(255,255,255,0.15)',
-                    background: active
-                      ? `linear-gradient(135deg,${d.color}30,${d.color}55)`
-                      : 'rgba(255,255,255,0.05)',
-                    cursor:'pointer',
-                    boxShadow: active ? `0 0 20px ${d.glow}` : 'none',
-                    transition:'all 0.2s',
-                  }}>
-                  <div style={{fontSize:28,marginBottom:6}}>{d.emoji}</div>
-                  <div style={{color: active ? d.color : 'rgba(255,255,255,0.7)',fontWeight:700,fontSize:12,lineHeight:1.3}}>
-                    {d.label}
-                  </div>
-                </button>
-              );
-            })}
+        {/* Mode tabs */}
+        <div className="card-glass" style={{borderRadius:20,padding:14}}>
+          {/* Tab bar */}
+          <div style={{display:'flex',gap:6,marginBottom:14,background:'rgba(0,0,0,0.2)',borderRadius:14,padding:4}}>
+            {tabBtn('cat',  '🎶 Gatunek / Epoka')}
+            {tabBtn('artist','🎤 Artysta')}
           </div>
+
+          {/* Category grid */}
+          {tab === 'cat' && (
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:9}}>
+              {CATEGORIES.map(d => {
+                const active = catId === d.id;
+                return (
+                  <button key={d.id} onClick={() => setCatId(d.id)}
+                    className="glossy-btn"
+                    style={{
+                      borderRadius:13,padding:'13px 6px',border:'2px solid',
+                      borderColor: active ? d.color : 'rgba(255,255,255,0.13)',
+                      background: active ? `linear-gradient(135deg,${d.color}28,${d.color}50)` : 'rgba(255,255,255,0.04)',
+                      cursor:'pointer',
+                      boxShadow: active ? `0 0 18px ${d.glow}` : 'none',
+                      transition:'all 0.18s',
+                    }}>
+                    <div style={{fontSize:26,marginBottom:5}}>{d.emoji}</div>
+                    <div style={{color: active ? d.color : 'rgba(255,255,255,0.65)',fontWeight:700,fontSize:11,lineHeight:1.3}}>
+                      {d.label}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Artist search */}
+          {tab === 'artist' && (
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              <div style={{display:'flex',gap:8}}>
+                <input
+                  type="text"
+                  value={artistInput}
+                  onChange={e => setArtistInput(e.target.value)}
+                  onKeyDown={e => e.key==='Enter' && handlePlay()}
+                  placeholder="np. Metallica, Dua Lipa..."
+                  style={{
+                    flex:1,padding:'12px 14px',borderRadius:12,border:'2px solid rgba(139,92,246,0.4)',
+                    background:'rgba(255,255,255,0.07)',color:'#fff',fontSize:14,outline:'none',
+                    fontFamily:'inherit',
+                  }}
+                />
+              </div>
+              {/* Recent artists */}
+              {recentArtists.length > 0 && (
+                <div>
+                  <p style={{color:'rgba(255,255,255,0.35)',fontSize:11,margin:'0 0 7px'}}>Ostatnio wyszukiwani:</p>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                    {recentArtists.map((a,i) => (
+                      <button key={i} onClick={() => setArtistInput(a)}
+                        style={{
+                          padding:'5px 11px',borderRadius:9999,border:'1px solid rgba(139,92,246,0.35)',
+                          background:'rgba(139,92,246,0.12)',color:'rgba(255,255,255,0.7)',
+                          fontSize:12,cursor:'pointer',fontFamily:'inherit',
+                          transition:'all 0.15s',
+                        }}>
+                        🎤 {a}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Leaderboard */}
         {leaderboard.length > 0 && (
           <div className="card-glass" style={{borderRadius:18,overflow:'hidden'}}>
-            <div style={{padding:'12px 16px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',gap:8}}>
-              <Ic.Trophy s={16} c="text-yellow-400"/>
-              <span style={{color:'rgba(255,255,255,0.85)',fontWeight:700,fontSize:14}}>Tabela wyników</span>
+            <div style={{padding:'11px 16px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',gap:8}}>
+              <Ic.Trophy s={15} c="text-yellow-400"/>
+              <span style={{color:'rgba(255,255,255,0.85)',fontWeight:700,fontSize:13}}>Tabela wyników</span>
             </div>
             {leaderboard.slice(0,5).map((e,i) => (
               <div key={i} style={{
-                display:'flex',alignItems:'center',gap:12,padding:'10px 16px',
+                display:'flex',alignItems:'center',gap:11,padding:'9px 16px',
                 borderBottom: i<Math.min(leaderboard.length,5)-1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                background: i===0 ? 'rgba(251,191,36,0.06)' : 'transparent',
+                background: i===0 ? 'rgba(251,191,36,0.05)' : 'transparent',
               }}>
-                <span style={{fontSize:18,width:24,textAlign:'center'}}>{medals[i] || `${i+1}`}</span>
+                <span style={{fontSize:16,width:22,textAlign:'center'}}>{medals[i]||`${i+1}`}</span>
                 <div style={{flex:1}}>
-                  <span style={{
-                    color: i===0?'#fbbf24':i===1?'#e2e8f0':i===2?'#fb923c':'rgba(255,255,255,0.6)',
-                    fontWeight:700,fontSize:15
-                  }}>{e.score.toLocaleString()}</span>
-                  <span style={{color:'rgba(255,255,255,0.3)',fontSize:11,marginLeft:8}}>pkt</span>
+                  <span style={{color:i===0?'#fbbf24':i===1?'#e2e8f0':i===2?'#fb923c':'rgba(255,255,255,0.6)',fontWeight:700,fontSize:14}}>
+                    {e.score.toLocaleString()}
+                  </span>
+                  <span style={{color:'rgba(255,255,255,0.25)',fontSize:10,marginLeft:6}}>pkt</span>
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:4}}>
-                  <span style={{fontSize:13}}>{DECADES.find(d=>d.id===e.decade)?.emoji || '🎵'}</span>
-                  <span style={{color:'rgba(255,255,255,0.35)',fontSize:11}}>{e.date}</span>
+                <div style={{display:'flex',alignItems:'center',gap:4,maxWidth:100,overflow:'hidden'}}>
+                  {e.artistName
+                    ? <span style={{color:'rgba(255,255,255,0.4)',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>🎤 {e.artistName}</span>
+                    : <span style={{fontSize:12}}>{CATEGORIES.find(d=>d.id===(e.category||e.decade))?.emoji||'🎵'}</span>
+                  }
+                  <span style={{color:'rgba(255,255,255,0.25)',fontSize:10,flexShrink:0}}>{e.date}</span>
                 </div>
               </div>
             ))}
@@ -272,46 +365,36 @@ function StartScreen({ onStart, leaderboard }) {
         )}
 
         {/* How to play */}
-        <div className="card-glass" style={{borderRadius:16,padding:14}}>
-          <div style={{color:'rgba(255,255,255,0.7)',fontWeight:700,fontSize:12,marginBottom:8,display:'flex',alignItems:'center',gap:5}}>
-            <Ic.Star s={13} c="text-yellow-400"/> Jak grać
+        <div className="card-glass" style={{borderRadius:15,padding:12}}>
+          <div style={{color:'rgba(255,255,255,0.65)',fontWeight:700,fontSize:12,marginBottom:7,display:'flex',alignItems:'center',gap:5}}>
+            <Ic.Star s={12} c="text-yellow-400"/> Jak grać
           </div>
-          <div style={{display:'flex',flexDirection:'column',gap:5}}>
-            {[
-              ['🎵','Posłuchaj fragmentu piosenki'],
-              ['⚡','Wybierz tytuł spośród 4 opcji w 15 sek.'],
-              ['🔥','3 pod rząd = COMBO ×2 – punkty x2!'],
-              ['🏆','Szybsza odpowiedź = więcej punktów'],
-            ].map(([em,txt],i) => (
-              <div key={i} style={{color:'rgba(255,255,255,0.5)',fontSize:12,display:'flex',alignItems:'flex-start',gap:7}}>
-                <span style={{flexShrink:0}}>{em}</span><span>{txt}</span>
-              </div>
-            ))}
-          </div>
+          {[['🎵','Posłuchaj fragmentu'],['⚡','Wybierz tytuł w 15 sek.'],['🔥','3 pod rząd = COMBO ×2!'],['🏆','Szybciej = więcej pkt']].map(([em,txt],i) => (
+            <div key={i} style={{color:'rgba(255,255,255,0.45)',fontSize:12,display:'flex',gap:7,marginBottom:3}}>
+              <span style={{flexShrink:0}}>{em}</span><span>{txt}</span>
+            </div>
+          ))}
         </div>
 
-        {/* Start button */}
-        <button
-          onClick={() => decade && onStart(decade)}
-          disabled={!decade}
-          className="glossy-btn"
-          style={{
-            width:'100%',padding:'18px 0',borderRadius:18,fontSize:19,fontWeight:900,
-            color:'#fff',border:'none',cursor: decade?'pointer':'default',
-            background: dec
-              ? `linear-gradient(135deg,${dec.color}88 0%,#7c3aed 50%,#3b82f6 100%)`
-              : 'linear-gradient(135deg,#3b82f6 0%,#7c3aed 100%)',
-            boxShadow: dec ? `0 10px 40px ${dec.glow},0 4px 15px rgba(0,0,0,0.3)` : 'none',
-          }}>
-          {decade ? `${dec.emoji} GRAJ – ${dec.label}` : '← Wybierz epokę'}
+        {/* Play button */}
+        <button onClick={handlePlay} disabled={!canPlay} className="glossy-btn" style={{
+          width:'100%',padding:'17px 0',borderRadius:17,fontSize:18,fontWeight:900,
+          color:'#fff',border:'none',cursor:canPlay?'pointer':'default',
+          background: canPlay
+            ? (cat ? `linear-gradient(135deg,${cat.color}99,#7c3aed)` : 'linear-gradient(135deg,#7c3aed,#3b82f6)')
+            : 'linear-gradient(135deg,#374151,#4b5563)',
+          boxShadow: canPlay ? (cat?`0 10px 40px ${cat.glow}`:'0 10px 40px rgba(124,58,237,0.4)') : 'none',
+        }}>
+          {canPlay
+            ? (tab==='artist' ? `🎤 GRAJ – ${artistInput.trim()}` : `${cat.emoji} GRAJ – ${cat.label}`)
+            : (tab==='cat' ? '← Wybierz gatunek' : '← Wpisz nazwę artysty')}
         </button>
-        <p style={{color:'rgba(255,255,255,0.2)',fontSize:11,textAlign:'center',marginTop:-10}}>
-          Muzyka: iTunes Search API
-        </p>
+        <p style={{color:'rgba(255,255,255,0.18)',fontSize:11,textAlign:'center',marginTop:-10}}>Muzyka: iTunes Search API</p>
       </div>
     </div>
   );
 }
+
 
 /* ── PLAYING SCREEN ── */
 function PlayingScreen({ round, score, currentSong, options, timeLeft, answered, selectedOption,
@@ -520,7 +603,7 @@ function PlayingScreen({ round, score, currentSong, options, timeLeft, answered,
 }
 
 /* ── RESULT SCREEN ── */
-function ResultScreen({ score, isNewHS, history, leaderboard, lbPosition, decadeId, onPlayAgain }) {
+function ResultScreen({ score, isNewHS, history, leaderboard, lbPosition, decadeId, artistName, onPlayAgain }) {
   const maxScore = TOTAL_ROUNDS * (BASE_PTS + ROUND_TIME * TIME_MULT);
   const pct = Math.round((score / maxScore) * 100);
   const correct = history.filter(h => h.correct).length;
@@ -530,7 +613,9 @@ function ResultScreen({ score, isNewHS, history, leaderboard, lbPosition, decade
     for (let j=i+1; j<history.length && history[j].correct; j++) run++;
     return Math.max(acc, run);
   }, 0);
-  const dec = DECADES.find(d => d.id === decadeId) || DECADES[2];
+  const dec = CATEGORIES.find(d => d.id === decadeId) || CATEGORIES[0];
+  const modeLabel = artistName ? `🎤 ${artistName}` : `${dec.emoji} ${dec.label}`;
+  const modeGlow  = artistName ? 'rgba(167,139,250,0.5)' : dec.glow;
   const medals = ['🥇','🥈','🥉'];
   const rank = pct>=90?['🏆','Legenda!','#fbbf24']:pct>=70?['🌟','Mistrz!','#a78bfa']:pct>=50?['🎵','Ekspert!','#60a5fa']:pct>=30?['🎶','Amator','#34d399']:['🎸','Nowicjusz','#fb923c'];
 
@@ -542,12 +627,12 @@ function ResultScreen({ score, isNewHS, history, leaderboard, lbPosition, decade
         <div style={{textAlign:'center'}}>
           <div style={{fontSize:48,marginBottom:8}}>🏁</div>
           <h2 style={{fontSize:28,fontWeight:900,color:'#fff',margin:'0 0 3px'}}>Koniec gry!</h2>
-          <p style={{color:'rgba(255,255,255,0.45)',margin:0,fontSize:13}}>{dec.emoji} {dec.label}</p>
+          <p style={{color:'rgba(255,255,255,0.45)',margin:0,fontSize:13}}>{modeLabel}</p>
         </div>
 
         {/* Score card */}
         <div className="card-glass" style={{borderRadius:22,padding:24,textAlign:'center',
-          boxShadow:`0 20px 60px rgba(0,0,0,0.3),0 0 40px ${dec.glow}30`}}>
+          boxShadow:`0 20px 60px rgba(0,0,0,0.3),0 0 40px ${modeGlow}30`}}>
           {isNewHS && (
             <div style={{display:'inline-flex',alignItems:'center',gap:8,marginBottom:12,
               background:'rgba(251,191,36,0.15)',borderRadius:9999,padding:'5px 14px',
@@ -687,6 +772,7 @@ function App() {
   const [combo, setCombo]               = useState(0);
   const [multiplier, setMultiplier]     = useState(1);
   const [selectedDecade, setSelectedDecade] = useState(null);
+  const [artistName, setArtistName]     = useState(null);
 
   /* refs */
   const audioRef        = useRef(new Audio());
@@ -699,6 +785,7 @@ function App() {
   const isMutedRef      = useRef(false);
   const roundIndexRef   = useRef(0);
   const comboRef        = useRef(0);
+  const artistNameRef   = useRef(null);
 
   /* ── loadRound ── */
   const loadRound = useCallback((idx, songList) => {
@@ -765,13 +852,13 @@ function App() {
       audioRef.current.pause();
       const nextIdx = roundIndexRef.current + 1;
       if (nextIdx >= TOTAL_ROUNDS) {
-        /* save to leaderboard */
         const today = new Date().toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit',year:'2-digit'});
-        const newLB = saveLB({ score: newScore, decade: selectedDecade, date: today });
+        const entry = { score: newScore, date: today,
+          category: selectedDecade, artistName: artistNameRef.current || null };
+        const newLB = saveLB(entry);
         setLeaderboard(newLB);
         const pos = newLB.findIndex(e => e.score === newScore);
         setLbPosition(pos === -1 ? null : pos + 1);
-        /* new high score? */
         const prevBest = getLB().find(e => e.score > newScore);
         setIsNewHS(!prevBest && newLB[0].score === newScore && newLB.filter(e=>e.score===newScore).length===1);
         setGameState('RESULT_SCREEN');
@@ -797,18 +884,28 @@ function App() {
   }, [roundKey, gameState, handleAnswer]);
 
   /* ── fetchSongs ── */
-  const fetchSongs = useCallback(async (decadeId) => {
-    setSelectedDecade(decadeId);
+  const fetchSongs = useCallback(async (categoryId, artist) => {
+    setSelectedDecade(categoryId);
+    setArtistName(artist || null);
+    artistNameRef.current = artist || null;
     setGameState('LOADING');
-    const dec   = DECADES.find(d => d.id === decadeId);
-    const terms = dec ? dec.terms : ['pop hits'];
-    const term  = terms[Math.floor(Math.random() * terms.length)];
+
+    let url;
+    if (artist) {
+      url = `https://itunes.apple.com/search?term=${encodeURIComponent(artist)}&entity=song&limit=50&attribute=artistTerm&country=US`;
+    } else {
+      const cat   = CATEGORIES.find(d => d.id === categoryId);
+      const terms = cat ? cat.terms : ['pop hits'];
+      const term  = terms[Math.floor(Math.random() * terms.length)];
+      url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=50&country=US`;
+    }
+
     try {
-      const res  = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=50&country=US`);
+      const res  = await fetch(url);
       if (!res.ok) throw new Error('API error');
       const data = await res.json();
       const valid = data.results.filter(s => s.previewUrl && s.trackName && s.artistName);
-      if (valid.length < 10) throw new Error('Too few songs with previews');
+      if (valid.length < 4) throw new Error('Too few songs with previews');
       songsRef.current = valid;
 
       scoreRef.current  = 0;
@@ -823,7 +920,7 @@ function App() {
       loadRound(0, valid);
     } catch (err) {
       console.error(err);
-      alert('Nie udało się załadować piosenek. Spróbuj ponownie.');
+      alert('Nie udało się załadować piosenek. Sprawdź połączenie i spróbuj ponownie.');
       setGameState('START_SCREEN');
     }
   }, [loadRound]);
@@ -843,10 +940,11 @@ function App() {
   if (gameState === 'START_SCREEN')
     return <StartScreen onStart={fetchSongs} leaderboard={leaderboard}/>;
   if (gameState === 'LOADING')
-    return <LoadingScreen decade={selectedDecade}/>;
+    return <LoadingScreen categoryId={selectedDecade} artistName={artistName}/>;
   if (gameState === 'RESULT_SCREEN')
     return <ResultScreen score={score} isNewHS={isNewHS} history={history}
-      leaderboard={leaderboard} lbPosition={lbPosition} decadeId={selectedDecade}
+      leaderboard={leaderboard} lbPosition={lbPosition}
+      decadeId={selectedDecade} artistName={artistName}
       onPlayAgain={() => setGameState('START_SCREEN')}/>;
 
   return (
