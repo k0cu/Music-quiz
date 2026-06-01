@@ -76,6 +76,20 @@ const TIME_MULT = 100;
 const COMBO_THRESHOLD = 3;
 const LB_KEY = 'mcLB';
 
+/*
+ * ── GLOBAL LEADERBOARD (Firebase Realtime Database) ──────────────────────────
+ *  1. Go to https://console.firebase.google.com/ and create a free project.
+ *  2. In the project, enable "Realtime Database" (Start in test mode is fine).
+ *  3. Copy your database URL (looks like https://YOUR-PROJECT-default-rtdb.firebaseio.com)
+ *     and paste it below instead of 'YOUR_FIREBASE_DB_URL'.
+ *  4. (Optional) Update the security rules to allow only writes, e.g.:
+ *     { "rules": { "leaderboard": { ".read": true, ".write": true } } }
+ *  Without this config the leaderboard stays local (per-browser, old behaviour).
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const FIREBASE_DB_URL = 'YOUR_FIREBASE_DB_URL';
+const FIREBASE_ENABLED = FIREBASE_DB_URL !== 'YOUR_FIREBASE_DB_URL';
+
 /* ── Categories config ── */
 const CATEGORIES = [
   { id:'pop',    emoji:'🎵', label:'Pop',            color:'#ec4899', glow:'rgba(236,72,153,0.5)',
@@ -110,22 +124,43 @@ function saveRecentArtist(name) {
 }
 
 /* ── Leaderboard helpers ── */
-function getLB() {
+function getLBLocal() {
   try { return JSON.parse(localStorage.getItem(LB_KEY) || '[]'); }
   catch { return []; }
 }
-function saveLB(entry) {
-  const lb = getLB();
-  lb.push(entry);
-  lb.sort((a,b) => b.score - a.score);
-  if (lb.length > 10) lb.length = 10;
-  localStorage.setItem(LB_KEY, JSON.stringify(lb));
-  return lb;
+async function loadLB() {
+  if (!FIREBASE_ENABLED) return getLBLocal();
+  try {
+    const res = await fetch(`${FIREBASE_DB_URL}/leaderboard.json`);
+    if (!res.ok) throw new Error('fetch error');
+    const data = await res.json();
+    if (!data) return [];
+    const entries = Object.values(data).filter(e => e && typeof e.score === 'number');
+    entries.sort((a, b) => b.score - a.score);
+    const top10 = entries.slice(0, 10);
+    localStorage.setItem(LB_KEY, JSON.stringify(top10));
+    return top10;
+  } catch {
+    return getLBLocal();
+  }
 }
-function getLBPosition(score) {
-  const lb = getLB();
-  const pos = lb.findIndex(e => e.score === score);
-  return pos === -1 ? null : pos + 1;
+async function saveLB(entry) {
+  const localLB = getLBLocal();
+  localLB.push(entry);
+  localLB.sort((a, b) => b.score - a.score);
+  if (localLB.length > 10) localLB.length = 10;
+  localStorage.setItem(LB_KEY, JSON.stringify(localLB));
+  if (!FIREBASE_ENABLED) return localLB;
+  try {
+    await fetch(`${FIREBASE_DB_URL}/leaderboard.json`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry),
+    });
+    return await loadLB();
+  } catch {
+    return localLB;
+  }
 }
 
 /* ── SVG Icons ── */
@@ -365,6 +400,11 @@ function StartScreen({ onStart, leaderboard, username, onUsernameChange }) {
             <div style={{padding:'11px 16px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',gap:8}}>
               <Ic.Trophy s={15} c="text-yellow-400"/>
               <span style={{color:'rgba(255,255,255,0.85)',fontWeight:700,fontSize:13}}>Tabela wyników</span>
+              <span style={{marginLeft:'auto',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:9999,
+                background: FIREBASE_ENABLED ? 'rgba(16,185,129,0.18)' : 'rgba(255,255,255,0.08)',
+                color: FIREBASE_ENABLED ? '#34d399' : 'rgba(255,255,255,0.35)',
+                border: FIREBASE_ENABLED ? '1px solid rgba(52,211,153,0.35)' : '1px solid rgba(255,255,255,0.12)',
+              }}>{FIREBASE_ENABLED ? '🌍 Globalna' : '💾 Lokalna'}</span>
             </div>
             {leaderboard.slice(0,5).map((e,i) => (
               <div key={i} style={{
@@ -708,6 +748,11 @@ function ResultScreen({ score, isNewHS, history, leaderboard, lbPosition, decade
             <div style={{padding:'11px 16px',borderBottom:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',gap:7}}>
               <Ic.Trophy s={15} c="text-yellow-400"/>
               <span style={{color:'rgba(255,255,255,0.8)',fontWeight:700,fontSize:13}}>Tabela wyników</span>
+              <span style={{marginLeft:'auto',fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:9999,
+                background: FIREBASE_ENABLED ? 'rgba(16,185,129,0.18)' : 'rgba(255,255,255,0.08)',
+                color: FIREBASE_ENABLED ? '#34d399' : 'rgba(255,255,255,0.35)',
+                border: FIREBASE_ENABLED ? '1px solid rgba(52,211,153,0.35)' : '1px solid rgba(255,255,255,0.12)',
+              }}>{FIREBASE_ENABLED ? '🌍 Globalna' : '💾 Lokalna'}</span>
             </div>
             {leaderboard.slice(0,5).map((e,i) => (
               <div key={i} style={{display:'flex',alignItems:'center',gap:11,padding:'9px 16px',
@@ -787,7 +832,7 @@ function App() {
   const [isMuted, setIsMuted]           = useState(false);
   const [audioError, setAudioError]     = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [leaderboard, setLeaderboard]   = useState(() => getLB());
+  const [leaderboard, setLeaderboard]   = useState(() => getLBLocal());
   const [isNewHS, setIsNewHS]           = useState(false);
   const [lbPosition, setLbPosition]     = useState(null);
   const [roundKey, setRoundKey]         = useState(0);
@@ -812,6 +857,9 @@ function App() {
   const comboRef        = useRef(0);
   const artistNameRef   = useRef(null);
   const usernameRef     = useRef(localStorage.getItem(UN_KEY) || '');
+
+  /* ── load global leaderboard on mount ── */
+  useEffect(() => { loadLB().then(lb => setLeaderboard(lb)); }, []);
 
   /* ── loadRound ── */
   const loadRound = useCallback((idx, songList) => {
@@ -878,7 +926,7 @@ function App() {
     setShowRoundScore(true);
     setTimeout(() => setShowRoundScore(false), 1900);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       audioRef.current.pause();
       const nextIdx = roundIndexRef.current + 1;
       if (nextIdx >= TOTAL_ROUNDS) {
@@ -886,12 +934,11 @@ function App() {
         const entry = { score: newScore, date: today,
           category: selectedDecade, artistName: artistNameRef.current || null,
           username: usernameRef.current || 'Gracz' };
-        const newLB = saveLB(entry);
+        const newLB = await saveLB(entry);
         setLeaderboard(newLB);
         const pos = newLB.findIndex(e => e.score === newScore);
         setLbPosition(pos === -1 ? null : pos + 1);
-        const prevBest = getLB().find(e => e.score > newScore);
-        setIsNewHS(!prevBest && newLB[0].score === newScore && newLB.filter(e=>e.score===newScore).length===1);
+        setIsNewHS(pos === 0 && newLB.filter(e => e.score === newScore).length === 1);
         setGameState('RESULT_SCREEN');
       } else {
         loadRound(nextIdx, songsRef.current);
