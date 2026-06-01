@@ -135,7 +135,10 @@ async function loadLB() {
     if (!res.ok) throw new Error('fetch error');
     const data = await res.json();
     if (!data) return [];
-    const entries = Object.values(data).filter(e => e && typeof e.score === 'number');
+    const entries = Object.values(data).filter(e =>
+      e && typeof e.score === 'number' && e.score >= 0 &&
+      typeof e.date === 'string' && typeof e.username === 'string'
+    );
     entries.sort((a, b) => b.score - a.score);
     const top10 = entries.slice(0, 10);
     localStorage.setItem(LB_KEY, JSON.stringify(top10));
@@ -145,8 +148,17 @@ async function loadLB() {
   }
 }
 async function saveLB(entry) {
+  /* sanitise entry: only allow expected fields with basic type checks */
+  const safe = {
+    score:      typeof entry.score === 'number' && entry.score >= 0 ? Math.round(entry.score) : 0,
+    date:       typeof entry.date === 'string'  ? entry.date.slice(0, 10)  : '',
+    username:   typeof entry.username === 'string' ? entry.username.slice(0, 20) : 'Gracz',
+    category:   typeof entry.category === 'string' ? entry.category.slice(0, 20) : null,
+    artistName: typeof entry.artistName === 'string' ? entry.artistName.slice(0, 50) : null,
+  };
+
   const localLB = getLBLocal();
-  localLB.push(entry);
+  localLB.push(safe);
   localLB.sort((a, b) => b.score - a.score);
   if (localLB.length > 10) localLB.length = 10;
   localStorage.setItem(LB_KEY, JSON.stringify(localLB));
@@ -155,7 +167,7 @@ async function saveLB(entry) {
     await fetch(`${FIREBASE_DB_URL}/leaderboard.json`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(entry),
+      body: JSON.stringify(safe),
     });
     return await loadLB();
   } catch {
@@ -938,7 +950,7 @@ function App() {
         setLeaderboard(newLB);
         const pos = newLB.findIndex(e => e.score === newScore);
         setLbPosition(pos === -1 ? null : pos + 1);
-        setIsNewHS(pos === 0 && newLB.filter(e => e.score === newScore).length === 1);
+        setIsNewHS(pos === 0);
         setGameState('RESULT_SCREEN');
       } else {
         loadRound(nextIdx, songsRef.current);
