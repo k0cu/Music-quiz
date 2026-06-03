@@ -93,17 +93,17 @@ const FIREBASE_ENABLED = FIREBASE_DB_URL !== 'YOUR_FIREBASE_DB_URL';
 /* ── Categories config ── */
 const CATEGORIES = [
   { id:'pop',    emoji:'🎵', label:'Pop',            color:'#ec4899', glow:'rgba(236,72,153,0.5)',
-    terms:['pop hits','pop songs 2023','pop music chart','pop radio hits','pop 2022'] },
+    terms:['pop hits','pop songs 2023','pop music chart','pop radio hits','pop 2022','pop 2021','pop anthems','pop 2020','indie pop hits','dance pop music','pop summer hits','pop 2019','pop 2018','teen pop','soft pop'] },
   { id:'rock',   emoji:'🎸', label:'Rock',           color:'#ef4444', glow:'rgba(239,68,68,0.5)',
-    terms:['rock music','classic rock hits','rock songs','alternative rock','indie rock'] },
+    terms:['rock music','classic rock hits','rock songs','alternative rock','indie rock','rock anthems','punk rock hits','grunge music','hard rock songs','rock 2000s hits','rock ballads','progressive rock','rock classics','garage rock','southern rock'] },
   { id:'metal',  emoji:'🤘', label:'Metal',          color:'#6366f1', glow:'rgba(99,102,241,0.5)',
-    terms:['heavy metal music','metal songs','thrash metal','hard rock metal','metal classics'] },
+    terms:['heavy metal music','metal songs','thrash metal','hard rock metal','metal classics','death metal songs','power metal','nu metal hits','speed metal','metalcore music','symphonic metal','black metal','melodic metal','groove metal','alternative metal'] },
   { id:'electro',emoji:'⚡', label:'Electro',        color:'#06b6d4', glow:'rgba(6,182,212,0.5)',
-    terms:['electronic music','electro dance','synth pop','dance electronic','edm hits'] },
+    terms:['electronic music','electro dance','synth pop','dance electronic','edm hits','techno music','house music hits','trance music','dubstep music','drum and bass','ambient electronic','electronic dance','club music','deep house','progressive house'] },
   { id:'80s',    emoji:'🕺', label:'Lata 80.',       color:'#f59e0b', glow:'rgba(245,158,11,0.5)',
-    terms:['80s pop music','80s rock hits','80s greatest hits','1980s music','80s classics'] },
+    terms:['80s pop music','80s rock hits','80s greatest hits','1980s music','80s classics','80s new wave','80s synth pop','80s dance hits','1984 hits','1986 hits','1988 hits','80s power ballads','80s one hit wonders','80s soundtrack','new wave music'] },
   { id:'90s',    emoji:'💿', label:'Lata 90.',       color:'#10b981', glow:'rgba(16,185,129,0.5)',
-    terms:['90s pop music','90s rock hits','90s greatest hits','1990s music','90s classics'] },
+    terms:['90s pop music','90s rock hits','90s greatest hits','1990s music','90s classics','90s grunge music','90s rnb hits','90s dance music','90s hip hop','90s alternative','1994 hits','1997 hits','90s boy bands','90s girl groups','90s pop rock'] },
 ];
 /* backward compat alias */
 const DECADES = CATEGORIES;
@@ -173,6 +173,12 @@ async function saveLB(entry) {
   } catch {
     return localLB;
   }
+}
+
+/* ── Leaderboard rank helper (handles ties) ── */
+function getLBRank(entries, idx) {
+  const score = entries[idx].score;
+  return entries.filter(e => e.score > score).length + 1;
 }
 
 /* ── SVG Icons ── */
@@ -418,15 +424,17 @@ function StartScreen({ onStart, leaderboard, username, onUsernameChange }) {
                 border: FIREBASE_ENABLED ? '1px solid rgba(52,211,153,0.35)' : '1px solid rgba(255,255,255,0.12)',
               }}>{FIREBASE_ENABLED ? '🌍 Globalna' : '💾 Lokalna'}</span>
             </div>
-            {leaderboard.slice(0,5).map((e,i) => (
+            {leaderboard.slice(0,5).map((e,i) => {
+              const rank = getLBRank(leaderboard.slice(0,5), i);
+              return (
               <div key={i} style={{
                 display:'flex',alignItems:'center',gap:11,padding:'9px 16px',
                 borderBottom: i<Math.min(leaderboard.length,5)-1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                background: i===0 ? 'rgba(251,191,36,0.05)' : 'transparent',
+                background: rank===1 ? 'rgba(251,191,36,0.05)' : 'transparent',
               }}>
-                <span style={{fontSize:16,width:22,textAlign:'center'}}>{medals[i]||`${i+1}`}</span>
+                <span style={{fontSize:16,width:22,textAlign:'center'}}>{medals[rank-1]||`${rank}`}</span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{color:i===0?'#fbbf24':i===1?'#e2e8f0':i===2?'#fb923c':'rgba(255,255,255,0.6)',fontWeight:700,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                  <div style={{color:rank===1?'#fbbf24':rank===2?'#e2e8f0':rank===3?'#fb923c':'rgba(255,255,255,0.6)',fontWeight:700,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                     {e.username || 'Gracz'}
                   </div>
                   <div style={{color:'rgba(255,255,255,0.4)',fontSize:11}}>{e.score.toLocaleString()} pkt</div>
@@ -436,7 +444,8 @@ function StartScreen({ onStart, leaderboard, username, onUsernameChange }) {
                   <span style={{color:'rgba(255,255,255,0.25)',fontSize:10}}>{e.date}</span>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -766,14 +775,16 @@ function ResultScreen({ score, isNewHS, history, leaderboard, lbPosition, decade
                 border: FIREBASE_ENABLED ? '1px solid rgba(52,211,153,0.35)' : '1px solid rgba(255,255,255,0.12)',
               }}>{FIREBASE_ENABLED ? '🌍 Globalna' : '💾 Lokalna'}</span>
             </div>
-            {leaderboard.slice(0,5).map((e,i) => (
+            {leaderboard.slice(0,5).map((e,i) => {
+              const rank = getLBRank(leaderboard.slice(0,5), i);
+              return (
               <div key={i} style={{display:'flex',alignItems:'center',gap:11,padding:'9px 16px',
                 borderBottom: i<Math.min(leaderboard.length,5)-1?'1px solid rgba(255,255,255,0.05)':'none',
-                background: e.score===score&&i===(lbPosition-1) ? 'rgba(139,92,246,0.12)' : i===0?'rgba(251,191,36,0.05)':'transparent',
+                background: e.score===score&&rank===lbPosition ? 'rgba(139,92,246,0.12)' : rank===1?'rgba(251,191,36,0.05)':'transparent',
               }}>
-                <span style={{fontSize:16,width:22,textAlign:'center'}}>{medals[i]||`${i+1}`}</span>
+                <span style={{fontSize:16,width:22,textAlign:'center'}}>{medals[rank-1]||`${rank}`}</span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{color:i===0?'#fbbf24':i===1?'#e2e8f0':i===2?'#fb923c':'rgba(255,255,255,0.55)',fontWeight:700,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                  <div style={{color:rank===1?'#fbbf24':rank===2?'#e2e8f0':rank===3?'#fb923c':'rgba(255,255,255,0.55)',fontWeight:700,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                     {e.username || 'Gracz'}
                   </div>
                   <div style={{color:'rgba(255,255,255,0.4)',fontSize:11}}>{e.score.toLocaleString()} pkt</div>
@@ -783,7 +794,8 @@ function ResultScreen({ score, isNewHS, history, leaderboard, lbPosition, decade
                   <span style={{color:'rgba(255,255,255,0.25)',fontSize:10}}>{e.date}</span>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -875,12 +887,12 @@ function App() {
 
   /* ── loadRound ── */
   const loadRound = useCallback((idx, songList) => {
-    const pool = [...songList].sort(() => Math.random() - 0.5);
-    const correct = pool[0];
+    const correct = songList[idx % songList.length];
+    const others   = songList.filter(s => s.trackId !== correct.trackId);
     /* prefer wrong options from different artists */
-    const diffArtist = pool.filter(s => s.artistName !== correct.artistName);
-    const sameOk     = pool.filter(s => s.trackId !== correct.trackId);
-    const wrongs     = diffArtist.length >= 3 ? diffArtist.slice(0,3) : sameOk.slice(0,3);
+    const diffArtist = others.filter(s => s.artistName !== correct.artistName);
+    const pool       = diffArtist.length >= 3 ? diffArtist : others;
+    const wrongs     = [...pool].sort(() => Math.random() - 0.5).slice(0, 3);
     const allOpts    = [correct, ...wrongs].sort(() => Math.random() - 0.5);
 
     currentSongRef.current = correct;
@@ -948,9 +960,10 @@ function App() {
           username: usernameRef.current || 'Gracz' };
         const newLB = await saveLB(entry);
         setLeaderboard(newLB);
-        const pos = newLB.findIndex(e => e.score === newScore);
-        setLbPosition(pos === -1 ? null : pos + 1);
-        setIsNewHS(pos === 0);
+        const inLB = newLB.some(e => e.score === newScore);
+        const rank = inLB ? newLB.filter(e => e.score > newScore).length + 1 : null;
+        setLbPosition(rank);
+        setIsNewHS(rank === 1);
         setGameState('RESULT_SCREEN');
       } else {
         loadRound(nextIdx, songsRef.current);
@@ -996,9 +1009,10 @@ function App() {
         const data = await res.json();
         valid = (data.results || []).filter(s => s.previewUrl && s.trackName && s.artistName);
       } else {
-        /* category mode: fetch ALL terms in parallel, merge, diversify */
-        const cat   = CATEGORIES.find(d => d.id === categoryId);
-        const terms = cat ? cat.terms : ['pop hits'];
+        /* category mode: fetch 5 randomly-selected terms in parallel, merge, diversify */
+        const cat      = CATEGORIES.find(d => d.id === categoryId);
+        const allTerms = cat ? cat.terms : ['pop hits'];
+        const terms    = [...allTerms].sort(() => Math.random() - 0.5).slice(0, 5);
         const results = await Promise.all(
           terms.map(term =>
             fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=50&country=US`)
@@ -1010,13 +1024,13 @@ function App() {
         /* deduplicate by trackId */
         const byId = new Map();
         for (const song of results.flat()) byId.set(song.trackId, song);
-        /* cap at 5 songs per artist for variety */
+        /* cap at 3 songs per artist for variety */
         const artistCount = {};
         valid = [...byId.values()].filter(s => {
           const k = s.artistName.toLowerCase();
-          return (artistCount[k] = (artistCount[k] || 0) + 1) <= 5;
+          return (artistCount[k] = (artistCount[k] || 0) + 1) <= 3;
         });
-        /* shuffle to mix artists */
+        /* pre-shuffle once so loadRound picks songs by index without repetition */
         valid = valid.sort(() => Math.random() - 0.5);
       }
       if (valid.length < 4) throw new Error('Too few songs with previews');
