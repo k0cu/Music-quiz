@@ -425,7 +425,7 @@ function StartScreen({ onStart, leaderboard, username, onUsernameChange }) {
               }}>{FIREBASE_ENABLED ? '🌍 Globalna' : '💾 Lokalna'}</span>
             </div>
             {leaderboard.slice(0,5).map((e,i) => {
-              const rank = getLBRank(leaderboard.slice(0,5), i);
+              const rank = getLBRank(leaderboard, i);
               return (
               <div key={i} style={{
                 display:'flex',alignItems:'center',gap:11,padding:'9px 16px',
@@ -776,7 +776,7 @@ function ResultScreen({ score, isNewHS, history, leaderboard, lbPosition, decade
               }}>{FIREBASE_ENABLED ? '🌍 Globalna' : '💾 Lokalna'}</span>
             </div>
             {leaderboard.slice(0,5).map((e,i) => {
-              const rank = getLBRank(leaderboard.slice(0,5), i);
+              const rank = getLBRank(leaderboard, i);
               return (
               <div key={i} style={{display:'flex',alignItems:'center',gap:11,padding:'9px 16px',
                 borderBottom: i<Math.min(leaderboard.length,5)-1?'1px solid rgba(255,255,255,0.05)':'none',
